@@ -67,7 +67,7 @@ internal static class GaussianDocument
             // Deleted assets need not retain all splats in managed memory until document close.
             if (Documents.TryGetValue(doc.RuntimeSerialNumber, out var assets))
             {
-                var hashes = instances.Select(o => o.Attributes.GetUserString(HashKey)).ToHashSet();
+                var hashes = instances.Select(o => Reference(o)?.Hash).ToHashSet();
                 string[] unused = assets.Keys.Where(hash => !hashes.Contains(hash)).ToArray();
                 foreach (string hash in unused) { assets[hash].Cancellation?.Cancel(); assets.Remove(hash); }
                 if (unused.Length > 0) GaussianViewport.ForgetDocument(doc.RuntimeSerialNumber);
@@ -88,10 +88,12 @@ internal static class GaussianDocument
         foreach (RhinoObject obj in doc.Objects.GetObjectList(settings))
             if (obj is InstanceObject instance && IsGaussian(instance) && (includeHidden || instance.Visible)) yield return instance;
     }
-    internal static bool IsGaussian(RhinoObject obj) => obj.Attributes.GetUserString(Marker) == "1";
+    private static GaussianReferenceMetadata? Reference(RhinoObject obj) => GaussianReferenceMetadata.Resolve(
+        obj.Attributes.GetUserString, () => obj.Attributes.GetUserStrings().AllKeys.OfType<string>());
+    internal static bool IsGaussian(RhinoObject obj) => Reference(obj) is not null;
     internal static AssetData? Ready(RhinoDoc doc, RhinoObject obj)
     {
-        string? hash = obj.Attributes.GetUserString(HashKey);
+        string? hash = Reference(obj)?.Hash;
         return hash is not null && Documents.TryGetValue(doc.RuntimeSerialNumber, out var assets) && assets.TryGetValue(hash, out var entry) ? entry.Data : null;
     }
     internal static List<Placement> Placements(RhinoDoc doc, global::Rhino.Display.RhinoViewport viewport)
@@ -121,33 +123,28 @@ internal static class GaussianDocument
     }
     private static void EnsureLoaded(RhinoDoc doc, InstanceObject obj)
     {
-        string? hash = obj.Attributes.GetUserString(HashKey);
-        if (hash is null || hash.Length != 64 || hash.Any(c => !Uri.IsHexDigit(c))) return;
+        GaussianReferenceMetadata? reference = Reference(obj);
+        if (reference is null) return;
+        string hash = reference.Hash;
         if (!Documents.TryGetValue(doc.RuntimeSerialNumber, out var assets)) Documents.Add(doc.RuntimeSerialNumber, assets = new());
         if (assets.ContainsKey(hash)) return;
         var entry = new AssetEntry { Loading = true, Cancellation = new CancellationTokenSource() }; assets.Add(hash, entry);
         uint serial = doc.RuntimeSerialNumber;
-        string? savedPath = obj.Attributes.GetUserString(PathKey);
-        _ = LoadAsync(serial, hash, savedPath, entry);
+        _ = LoadAsync(serial, reference, entry);
     }
-    private static async Task LoadAsync(uint serial, string hash, string? savedPath, AssetEntry entry)
+    private static async Task LoadAsync(uint serial, GaussianReferenceMetadata reference, AssetEntry entry)
     {
+        string hash = reference.Hash;
         CancellationTokenSource cancellation = entry.Cancellation!;
         CancellationToken ct = cancellation.Token;
         try
         {
             AssetData data = await Task.Run(() =>
             {
-                string path = System.IO.Path.Combine(CacheRoot, hash + ".ply");
-                if (!File.Exists(path))
-                {
-                    if (string.IsNullOrWhiteSpace(savedPath) || !System.IO.Path.IsPathFullyQualified(savedPath) || savedPath.StartsWith("\\\\", StringComparison.Ordinal))
-                        throw new IOException("找不到此 GS 的本地缓存；请从原始文件重新导入，包围盒仍保留。");
-                    path = savedPath;
-                }
-                if (!string.Equals(Hash(path, ct), hash, StringComparison.OrdinalIgnoreCase))
-                    throw new IOException("GS 资源内容与文档记录的哈希不一致；保留包围盒，请重新导入。");
-                return ReadAsset(path, hash, ct);
+                GaussianReferenceData loaded = GaussianReferenceAsset.Load(reference, CacheRoot, ct);
+                if (loaded.CopiedToCache)
+                    GaussianLog.Write("reference_cached", $"hash={hash}; compatible={!reference.IsNative}; splats={loaded.Splats.Length}");
+                return PrepareAsset(loaded.Splats, loaded.Path, hash, ct);
             }, ct).ConfigureAwait(false);
             await GSRhinoHost.OnUi(() =>
             {
@@ -407,8 +404,6 @@ internal static class GaussianDocument
         ct.ThrowIfCancellationRequested();
         return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
     }
-    private static AssetData ReadAsset(string path, string hash, CancellationToken ct)
-        => PrepareAsset(PlyReader.ReadGaussians(path, ct).ToArray(), path, hash, ct);
     private static AssetData PrepareAsset(GaussianSplat[] source, string path, string hash, CancellationToken ct)
     {
         BoundingBox bounds = BoundingBox.Empty;
@@ -471,10 +466,21 @@ internal static class GaussianDocument
         if(index<0) throw new InvalidOperationException("无法创建可见 GS 图层。");
         return index;
     }
+    internal sealed record DocumentStatus(int Instances, int CompatibleInstances, int Loaded, int Loading, int Errors);
+    internal static DocumentStatus Status(RhinoDoc doc)
+    {
+        var references = Instances(doc, null, true).Select(Reference).Where(r => r is not null).ToArray();
+        Documents.TryGetValue(doc.RuntimeSerialNumber, out var assets);
+        return new(references.Length, references.Count(r => !r!.IsNative),
+            assets?.Values.Count(a => a.Data is not null) ?? 0,
+            assets?.Values.Count(a => a.Loading) ?? 0, assets?.Values.Count(a => a.Error is not null) ?? 0);
+    }
     internal static string Diagnostics(RhinoDoc doc)
     {
-        int instances=Instances(doc,null,true).Count();
-        if(!Documents.TryGetValue(doc.RuntimeSerialNumber,out var assets)) return $"GS 块实例：{instances}；资源尚未加载。";
-        return $"GS 块实例：{instances}；已加载资源：{assets.Values.Count(a=>a.Data is not null)}；加载中：{assets.Values.Count(a=>a.Loading)}；资源错误：{assets.Values.Count(a=>a.Error is not null)}。";
+        DocumentStatus status = Status(doc);
+        string message = $"GS 块实例：{status.Instances}（兼容引用：{status.CompatibleInstances}）；已加载资源：{status.Loaded}；加载中：{status.Loading}；资源错误：{status.Errors}。";
+        if (Documents.TryGetValue(doc.RuntimeSerialNumber, out var assets))
+            foreach (string error in assets.Values.Where(a => a.Error is not null).Select(a => a.Error!).Distinct().Take(3)) message += "\n" + error;
+        return message;
     }
 }

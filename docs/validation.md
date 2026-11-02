@@ -1,12 +1,18 @@
 # Validation
 
-Candidate: **0.1.0-beta.1**. Maintainer: **CuriousArc · qrost**. Date: 2026-11-02.
+Candidate: **0.1.0-beta.2**. Maintainer: **CuriousArc · qrost**. Date: 2026-11-02.
+
+## Beta.2 existing-document repair
+
+The user confirmed beta.1 installed, then opened an existing 3DM and changed display modes. Diagnostics reported zero GS instances and zero input while claiming a complete frame. The reference recognizer accepted only the native namespace, so compatible existing GS blocks were omitted before any projection or drawing. The empty-frame message concealed this cause.
+
+Beta.2 reads unambiguous version-1 GS metadata across namespaces, verifies the referenced PLY against its SHA-256, and caches the complete data without rewriting the original document, asset or instance transform. Sixteen new reference tests cover namespace isolation, ambiguity, preserved data, missing/corrupt caches and cancellation. Fifteen display-policy tests cover empty, loading, failed, hidden, partially ready and projected-zero scenes. Empty placement sets no longer enqueue projection work. Native visual confirmation of the repair remains pending the user's restart and retest.
 
 ## Verified locally
 
 - Complete Release solution build on Apple Silicon macOS using .NET SDK 8.0.129: **zero warnings and errors**. Rhino SDK target: 8.32.26160.13001.
-- **201 .NET tests passed**, zero failures/skips. Coverage includes full PLY encodings and SH, covariance, projection, sorting, opacity, depth reference, camera/DPI stability, mode-registration policy, canonical PLY roundtrip, SPLAT, SPZ and USD bridge protocol validation.
-- **13 real OpenUSD integration checks passed** with the official pinned `usd-core==26.11` runtime. USDA, USDC and USDC-root USDZ produce equivalent full GS parts; hierarchical/non-uniform transforms, instances, half/float fields, complete SH and explicit rejection of unsupported/missing dependencies are covered. Expected warnings in the missing-reference negative fixture are intentional.
+- **232 .NET tests passed**, zero failures/skips. Coverage includes full PLY encodings and SH, covariance, projection, sorting, opacity, depth reference, camera/DPI stability, mode-registration policy, canonical PLY roundtrip, SPLAT, SPZ, USD bridge protocol validation, compatible GS reference/cache recovery and truthful display status.
+- Retained beta.1 decoder evidence (decoder unchanged in beta.2): **13 real OpenUSD integration checks passed** with the official pinned `usd-core==26.11` runtime. USDA, USDC and USDC-root USDZ produce equivalent full GS parts; hierarchical/non-uniform transforms, instances, half/float fields, complete SH and explicit rejection of unsupported/missing dependencies are covered. Expected warnings in the missing-reference negative fixture are intentional.
 - Actual C# `GaussianSceneReader` → isolated Python → GS cache decoding succeeded for `usd-two-parts.usdz`: two parts, four splats, SH3, Z-up, 0.001 meters/unit. The default private runtime location was verified against the plugin's .NET application-data location.
 - Six synthetic SPZ fixtures were generated and decoded by the pinned official C++ implementation. Tests compare parameters, transformed positions, covariance and view-dependent SH color. This caught and corrected the rotated coordinate-family mapping. All 13 fixture/generator SHA-256 values match the provenance record. No user model is included.
 - Four CPU reference PNGs have closed-form alpha/depth center values. Both procedural Gaussian textures reproduce byte-for-byte. These are mathematical checks, not native screenshots.

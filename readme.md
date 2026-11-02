@@ -2,7 +2,7 @@
 
 **A local Gaussian splat viewer for Rhino 8.** By **CuriousArc · qrost**.
 
-[简体中文](readme.zh-CN.md) · Version **0.1.0-beta.1** · Local preview candidate
+[简体中文](readme.zh-CN.md) · Version **0.1.0-beta.2** · Local preview candidate
 
 Import Gaussian scenes and view their anisotropic splats, opacity and view-dependent SH color inside Rhino's modeling viewport. GSRhino keeps full supported Gaussian data; it does not replace splats with point clouds or silently reduce their count. No account or API key is needed.
 
@@ -55,6 +55,10 @@ Default runtime: macOS `~/Library/Application Support/GSRhino/usd-runtime`; Wind
 4. Use **`GSRhinoMode`** to enable/reload the display, **`GSRhinoDiagnostics`** for local status and log/cache paths, or **`GSRhinoProbe`** for the offline color/occlusion fixture.
 
 `GSRhinoImport` opens a direct file picker with automatic axis/units and scale 1. The panel provides custom settings and cancellation. Unknown source units use 1 file unit = 1 document unit; unknown up axis defaults to Z. USD stage units and axes are respected in Auto mode, including OpenUSD's standard defaults for unauthored metadata (0.01 meter per unit and its default up axis).
+
+### Existing 3DM documents
+
+Version 0.1.0-beta.2 also recognizes compatible version-1 GS block references produced under another namespace. Open the existing 3DM and enable `GSRhinoMode`; no re-import is needed when its referenced local PLY is available. The reader verifies the recorded SHA-256 and complete Gaussian data, copies it into GSRhino's own cache, and keeps the existing instance transform. It does not rewrite the document or source file. Missing/corrupt references retain their boxes and report a specific error.
 
 ## Storage and current limits
 

@@ -299,8 +299,15 @@ internal sealed class GaussianViewport : DisplayConduit
         _backend=e.Display.IsOpenGL?"OpenGL（当前视窗）":"Non-OpenGL（不能仅据此确认 Metal）";
         try
         {
-            GaussianCamera camera=Camera(e.Viewport,e.Display.FrameSize.Width,e.Display.FrameSize.Height);
             var placements=GaussianDocument.Placements(e.RhinoDoc,e.Viewport);
+            if(placements.Count==0)
+            {
+                // A loading, hidden or unrecognized scene has no frame to prepare. Asset completion and
+                // native object changes will redraw again; camera motion must not enqueue empty generations.
+                RemoveView(e.Viewport.Id,"no_ready_placements");
+                return;
+            }
+            GaussianCamera camera=Camera(e.Viewport,e.Display.FrameSize.Width,e.Display.FrameSize.Height);
             string key=PlacementKey(placements);
             bool sameScene=previous is not null&&previous.Request.Key==key;
             if(sameScene&&GaussianFramePolicy.CanReuse(previous!.Request.Camera,camera))
@@ -367,8 +374,9 @@ internal sealed class GaussianViewport : DisplayConduit
         if(!Supported(e))return;
         _views.TryGetValue(e.Viewport.Id,out var state);
         bool candidate=_candidates.ContainsKey(e.Viewport.Id);
-        if(!candidate&&(state is null||state.DrawAccepted&&state.Error is null))return;
-        string progress=candidate?"GSRhino GS：视图稳定后准备显示":state!.Error is not null?"GSRhino GS：准备失败，已保留包围盒；运行 GSRhinoDiagnostics":state.Pending is not null?$"GSRhino GS：上传 {state.Batches.Count:N0}/{state.TotalBatches:N0} 批；完整就绪后显示":state.Started?"GSRhino GS：后台投影与排序中；原始资源完整保留":"GSRhino GS：视图稳定后准备显示";
+        if(!candidate&&state is not null&&state.DrawAccepted&&state.Error is null&&state.InputCount>0&&state.VisibleCount>0)return;
+        GaussianDisplayPhase phase=DisplayPhase(e.RhinoDoc,e.Viewport,state,candidate,true,true);
+        string progress="GSRhino："+DisplayText(phase,state);
         e.Display.Draw2dText(progress,Color.FromArgb(45,135,175),new Point2d(18,38),false,14);
     }
     private void AcceptStableCandidates()
@@ -565,6 +573,39 @@ internal sealed class GaussianViewport : DisplayConduit
         }
         return key.ToString();
     }
+    private static GaussianDisplayPhase DisplayPhase(RhinoDoc doc,RhinoViewport? viewport,ViewState? frame,bool candidate,bool modelView,bool gsMode)
+    {
+        GaussianDocument.DocumentStatus document=GaussianDocument.Status(doc);
+        return GaussianDisplayStatus.Evaluate(new GaussianDisplayFacts
+        {
+            DocumentInstances=document.Instances,LoadedResources=document.Loaded,LoadingResources=document.Loading,ResourceErrors=document.Errors,
+            VisibleInstances=viewport is null?0:GaussianDocument.Instances(doc,viewport).Count(),
+            ReadyPlacements=viewport is null?0:GaussianDocument.Placements(doc,viewport).Count,
+            IsModelView=modelView,IsGsMode=gsMode,HasCandidate=candidate,HasFrame=frame is not null,
+            FrameComplete=frame?.Complete==true,UploadPending=frame?.Pending is not null,FrameFailed=frame?.Error is not null,
+            InputCount=frame?.InputCount??0,ProjectedCount=frame?.VisibleCount??0
+        });
+    }
+    private static string DisplayText(GaussianDisplayPhase phase,ViewState? frame)=>phase switch
+    {
+        GaussianDisplayPhase.NoRecognizedInstances=>"文档中未识别到 GS 引用；请导入原始 GS 文件。",
+        GaussianDisplayPhase.WaitingForModelView=>"请激活原生模型视图。",
+        GaussianDisplayPhase.NoVisibleInstances=>"当前视图没有可见 GS 对象；检查隐藏状态和图层。",
+        GaussianDisplayPhase.WaitingForResources=>"已识别 GS，等待读取本地资源；保留包围盒。",
+        GaussianDisplayPhase.LoadingResources=>"已识别 GS，资源加载中；保留包围盒。",
+        GaussianDisplayPhase.ResourceLoadFailed=>"GS 资源加载失败；保留包围盒，请查看资源错误或恢复原始文件。",
+        GaussianDisplayPhase.NoRenderablePlacements=>"当前可见 GS 尚不能绘制；检查实例变换或资源状态。",
+        GaussianDisplayPhase.WaitingForGsMode=>"资源已加载；请切换到 GSRhino 显示模式。",
+        GaussianDisplayPhase.WaitingForStableView=>"视角变化，等待稳定后准备显示。",
+        GaussianDisplayPhase.WaitingForFrame=>"资源已加载，等待模型视图准备显示。",
+        GaussianDisplayPhase.Preparing=>"后台投影与排序中；保留包围盒。",
+        GaussianDisplayPhase.Uploading=>$"上传 {frame?.Batches.Count??0:N0}/{frame?.TotalBatches??0:N0} 批；完整就绪后显示。",
+        GaussianDisplayPhase.PreparationFailed=>"显示准备失败；保留包围盒，运行 GSRhinoDiagnostics 查看错误。",
+        GaussianDisplayPhase.NoProjectedGaussians=>"GS 已加载，当前视角投影可见数量为 0；检查视角和裁切范围。",
+        GaussianDisplayPhase.PartiallyReady=>"部分 GS 已就绪；其他可见实例仍待加载或存在错误。",
+        GaussianDisplayPhase.Ready=>"当前视图可见 GS 已就绪。",
+        _=>"显示状态未知。"
+    };
     private static string StorageDiagnostics => "GS 缓存目录："+Path.Combine(LocalStorage.Root,"assets","gaussians")+"\n原始源文件目录："+Path.Combine(LocalStorage.Root,"sources");
     internal static string Diagnostics(RhinoDoc doc)
     {
@@ -576,7 +617,8 @@ internal sealed class GaussianViewport : DisplayConduit
         ViewDiagnostics? diagnostics=null;
         if(active is not null)conduit?._diagnostics.TryGetValue(active.Id,out diagnostics);
         bool candidate=active is not null&&conduit?._candidates.ContainsKey(active.Id)==true;
-        string status=candidate?"视角变化，等待稳定后准备":state is null?"等待原生模型视窗":state.Error is not null?"准备失败，包围盒保留":state.Complete?"全量可见 GS 已就绪":state.Pending is not null?$"上传 {state.Batches.Count:N0}/{state.TotalBatches:N0} 批":"后台投影/排序中";
+        bool modelView=active is not null&&doc.Views.ActiveView is not RhinoPageView;
+        string status=DisplayText(DisplayPhase(doc,active,state,candidate,modelView,active is not null&&IsMode(active)),state);
         return "GSRhino GS 批量实验版；"+(conduit?._backend??"未初始化")+"。\n"+GaussianDocument.Diagnostics(doc)+"\n"+
             $"状态：{status}；输入：{state?.InputCount??0:N0}；投影可见：{state?.VisibleCount??0:N0}；本帧批数：{state?.Batches.Count??0:N0}；每批最多 {GaussianNativeBatchBuilder.SplatsPerBatch} 个 GS（无总数上限）。\n"+
             $"后台准备 {state?.PreparationMilliseconds??0:F1} ms；最长单批上传 {state?.MaxUploadMilliseconds??0:F1} ms；最近绘制 {state?.LastDrawMilliseconds??0:F1} ms；已跳过缩略图/非原生尺寸绘制 {conduit?._skippedPreviews??0:N0} 次。\n"+

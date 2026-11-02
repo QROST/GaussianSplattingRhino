@@ -19,6 +19,8 @@ Canonical PLY caches store positions, log scales, quaternions and opacity logits
 
 Rhino documents contain instance proxies and references to external caches, rather than embedding hundreds of megabytes of GS data into the 3DM. Moving a 3DM alone does not move those caches. Portable project bundling is future work.
 
+Compatible existing GS blocks are resolved through same-prefix `.GS.Version`, `.GS.Sha256` and `.GS.AssetPath` metadata. The native prefix has priority; foreign references require version 1, a valid SHA-256 and an unambiguous prefix. Asset fields are never mixed across producers. On first load the referenced local PLY is snapshotted, hash-checked and strictly parsed before publishing a private cache. Rendering continues to use the existing Rhino instance transform, and never writes compatibility metadata back to the document.
+
 ## Display pipeline
 
 Full data is projected and depth-sorted on a cancellable background worker. Quads are grouped into bounded upload batches; a shared opacity atlas preserves smooth anisotropic splats without one Rhino material per Gaussian. UI transfers use small time slices. While a new camera view is being prepared, a proxy may appear; the implementation never labels a partial frame as complete.
