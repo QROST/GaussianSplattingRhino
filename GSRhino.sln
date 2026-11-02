@@ -1,0 +1,51 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{A7CDEF9D-14D0-4B74-9FEA-2F8AF27EC42B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GSRhino.Core", "src\GSRhino.Core\GSRhino.Core.csproj", "{003D6131-E98C-469F-AEEA-F2B1341CE717}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GSRhino.Rhino", "src\GSRhino.Rhino\GSRhino.Rhino.csproj", "{CDB989A1-8B16-4CB3-8D33-3994AC43B3C7}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{A5ED4ED3-142D-450B-A698-5BC5997FA5E5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GSRhino.Tests", "tests\GSRhino.Tests\GSRhino.Tests.csproj", "{EF15E804-F010-4BC0-8655-22152183710F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{39363F99-7373-48B8-8FEB-A936FBBFCC43}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GSRhino.Reference", "tools\GSRhino.Reference\GSRhino.Reference.csproj", "{C929463C-AED4-4450-B5A6-7D51D568A664}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{003D6131-E98C-469F-AEEA-F2B1341CE717}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{003D6131-E98C-469F-AEEA-F2B1341CE717}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{003D6131-E98C-469F-AEEA-F2B1341CE717}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{003D6131-E98C-469F-AEEA-F2B1341CE717}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CDB989A1-8B16-4CB3-8D33-3994AC43B3C7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CDB989A1-8B16-4CB3-8D33-3994AC43B3C7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CDB989A1-8B16-4CB3-8D33-3994AC43B3C7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CDB989A1-8B16-4CB3-8D33-3994AC43B3C7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EF15E804-F010-4BC0-8655-22152183710F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EF15E804-F010-4BC0-8655-22152183710F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EF15E804-F010-4BC0-8655-22152183710F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EF15E804-F010-4BC0-8655-22152183710F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C929463C-AED4-4450-B5A6-7D51D568A664}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C929463C-AED4-4450-B5A6-7D51D568A664}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C929463C-AED4-4450-B5A6-7D51D568A664}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C929463C-AED4-4450-B5A6-7D51D568A664}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{003D6131-E98C-469F-AEEA-F2B1341CE717} = {A7CDEF9D-14D0-4B74-9FEA-2F8AF27EC42B}
+		{CDB989A1-8B16-4CB3-8D33-3994AC43B3C7} = {A7CDEF9D-14D0-4B74-9FEA-2F8AF27EC42B}
+		{EF15E804-F010-4BC0-8655-22152183710F} = {A5ED4ED3-142D-450B-A698-5BC5997FA5E5}
+		{C929463C-AED4-4450-B5A6-7D51D568A664} = {39363F99-7373-48B8-8FEB-A936FBBFCC43}
+	EndGlobalSection
+EndGlobal

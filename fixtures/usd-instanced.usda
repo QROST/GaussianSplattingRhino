@@ -1,0 +1,23 @@
+#usda 1.0
+(
+    metersPerUnit = 0.001
+    upAxis = "Z"
+)
+
+def Xform "A" (
+    instanceable = true
+    prepend references = @usd-prototype.usda@
+)
+{
+    double3 xformOp:translate = (3, 0, 0)
+    uniform token[] xformOpOrder = ["xformOp:translate"]
+}
+
+def Xform "B" (
+    instanceable = true
+    prepend references = @usd-prototype.usda@
+)
+{
+    double3 xformOp:translate = (9, 0, 0)
+    uniform token[] xformOpOrder = ["xformOp:translate"]
+}

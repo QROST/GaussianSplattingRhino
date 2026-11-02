@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <TargetExt>.rhp</TargetExt>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <Description>GSRhino by CuriousArc and qrost. Local Gaussian splat import and native Rhino viewport display.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="RhinoCommon" IncludeAssets="compile;build" PrivateAssets="all" />
+    <ProjectReference Include="../GSRhino.Core/GSRhino.Core.csproj" />
+    <None Include="../../assets/gaussian-opacity-atlas.png" Link="assets/gaussian-opacity-atlas.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../scripts/usd_bridge.py" Link="usd/usd_bridge.py" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
