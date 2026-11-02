@@ -12,3 +12,7 @@ Version target: **0.1.0-beta.1**. Local candidates are not public releases.
 No artificial splat-count ceiling or silent subsampling. Actual memory/runtime/host limits still apply. No generation service, account system or cloud rendering. No publication or remote source push is part of this task.
 
 USD/USDZ decoding uses a pinned, isolated OpenUSD process. PLY/SPLAT/SPZ do not require Python. Unsupported animation, vendor schemas and SH above degree 3 are explicit errors for the first candidate.
+
+## Current milestone
+
+The standalone viewer, file importers, source/cache preservation, regression fixtures and bilingual documentation are implemented. Release compilation, 201 offline .NET tests, 13 real OpenUSD checks and local Mac/Windows archive verification passed. The initial development version is 0.1.0-beta.1. Native GSRhino acceptance and dedicated GPU-renderer/performance work remain separate milestones.
