@@ -7,3 +7,4 @@ artifacts/
 .env*
 __pycache__/
 *.pyc
+AGENTS.md
