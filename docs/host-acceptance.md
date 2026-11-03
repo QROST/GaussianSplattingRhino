@@ -11,6 +11,7 @@ Record Rhino version, OS/architecture, graphics backend, asset hash/count and re
 7. Cancel during decode/preparation; switch or close documents during import; check no partial insertion, stalled UI or unhandled exception.
 8. Undo/redo, copy/move/scale/rotate an imported instance, import the same source twice, delete it, save/reopen and restart. Temporarily remove a cache and verify a visible diagnostic instead of silent loss.
 9. Open an existing 3DM containing compatible v1 GS references created before GSRhino. Switch to GSRhino mode without re-importing. Verify a nonzero instance/compatible-reference count, correct placement/color and no document modification. Check missing/corrupt source references report resource errors rather than success. An empty document must say no GS was recognized and create no empty projection jobs.
-10. Repeat on Windows Rhino and Intel Mac. Passing Apple Silicon Mac does not close these rows.
+10. Perform the [USD import/export checks](usd-exchange.md#manual-acceptance), including transformed copies, units, all four extensions, missing assets and cancellation.
+11. Repeat on Windows Rhino and Intel Mac. Passing Apple Silicon Mac does not close these rows.
 
 Use `GSRhinoDiagnostics` for the local log/cache locations. Logs and asset paths may be private; inspect before sharing. No network service is required for these checks after the optional USD decoder is installed.

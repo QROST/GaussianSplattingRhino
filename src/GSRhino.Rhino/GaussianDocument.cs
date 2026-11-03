@@ -8,7 +8,7 @@ using Color = System.Drawing.Color;
 namespace GSRhino.Rhino;
 
 /// <summary>GS data stays in an immutable PLY; a normal Rhino block stores placement and undo state.</summary>
-internal static class GaussianDocument
+internal static partial class GaussianDocument
 {
     internal const string Marker = "GSRhino.GS.Version";
     internal const string HashKey = "GSRhino.GS.Sha256";
@@ -433,7 +433,7 @@ internal static class GaussianDocument
             foreach (var a in proxyAttributes) a.SetUserString(ProxyKey, data.Hash);
             definition = doc.InstanceDefinitions.Add("GSRhinoGS_" + data.Hash[..10] + "_" + Guid.NewGuid().ToString("N")[..6], "GSRhino Gaussian reference; bounding box placeholder.", Point3d.Origin, geometry, proxyAttributes);
             if (definition < 0) throw new InvalidOperationException("无法建立 GS 块定义。");
-            using var attrs = new ObjectAttributes { Name = "GSRhino · " + System.IO.Path.GetFileNameWithoutExtension(source.Name) + " · " + part.Name, LayerIndex = layer };
+            using var attrs = new ObjectAttributes { Name = scene.Format.StartsWith("OpenUSD", StringComparison.Ordinal) ? part.Name : "GSRhino · " + System.IO.Path.GetFileNameWithoutExtension(source.Name) + " · " + part.Name, LayerIndex = layer };
             attrs.SetUserString(Marker,"1"); attrs.SetUserString(HashKey,data.Hash); attrs.SetUserString(PathKey,data.Path);
             attrs.SetUserString("GSRhino.GS.SourceName",source.Name);
             attrs.SetUserString("GSRhino.GS.SourceSha256",source.Hash);

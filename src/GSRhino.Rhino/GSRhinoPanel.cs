@@ -5,6 +5,7 @@ using Eto.Drawing;
 using Eto.Forms;
 using Rhino.UI;
 using OpenFileDialog = Eto.Forms.OpenFileDialog;
+using SaveFileDialog = Eto.Forms.SaveFileDialog;
 using RhinoDoc = global::Rhino.RhinoDoc;
 namespace GSRhino.Rhino;
 
@@ -22,7 +23,9 @@ public sealed class GSRhinoPanel : Panel, IPanel
     private readonly TextArea _feedback = new() { ReadOnly = true, Wrap = true, Height = 135 };
     private readonly Button _choose = new() { Text = "选择文件…" };
     private readonly Button _import = new() { Text = "导入当前文档", Enabled = false };
-    private readonly Button _cancel = new() { Text = "取消导入", Enabled = false };
+    private readonly Button _cancel = new() { Text = "取消操作", Enabled = false };
+    private readonly DropDown _exportScope = new() { DataStore = new[] { "选中的顶层 GS", "全部顶层 GS（包含隐藏 / 锁定）" }, SelectedIndex = 0 };
+    private readonly Button _export = new() { Text = "导出 USD / USDZ…" };
     private readonly Button _mode = new() { Text = "启用 / 重新加载 GS 显示" };
     private readonly Button _diagnostics = new() { Text = "诊断信息" };
     private readonly UITimer _timer = new() { Interval = 1 };
@@ -35,6 +38,7 @@ public sealed class GSRhinoPanel : Panel, IPanel
         _serial = documentSerialNumber;
         _choose.Click += (_, _) => RunLocal(ChooseFile);
         _import.Click += (_, _) => _ = ImportAsync();
+        _export.Click += (_, _) => _ = ExportAsync();
         _cancel.Click += (_, _) => { _operation?.Cancel(); _status.Text = "正在取消；等待当前读取退出…"; _cancel.Enabled = false; };
         _mode.Click += (_, _) => RunLocal(() => { GaussianViewport.Activate(Document()); _feedback.Text = "已启用 GSRhino 显示。导航期间显示包围盒，视图静止后恢复 GS。"; });
         _diagnostics.Click += (_, _) => RunLocal(() => _feedback.Text = GaussianViewport.Diagnostics(Document()));
@@ -51,11 +55,14 @@ public sealed class GSRhinoPanel : Panel, IPanel
                 new Label { Text = "源向上轴" }, _axis,
                 new Label { Text = "源单位" }, _units,
                 new Label { Text = "额外比例倍率" }, _scale,
-                Row(_import, _cancel), _status, _elapsed, _feedback,
+                _import,
+                new Label { Text = "GS 场景导出" }, _exportScope, _export,
+                Info("仅导出顶层 GS；不包含 Mesh / Brep。全部导出会将隐藏 GS 也作为可见资产写入。"),
+                _cancel, _status, _elapsed, _feedback,
                 _mode, _diagnostics,
                 Info("完整数据保留，不设固定数量上限。读取、投影和排序在后台执行；准备期间显示包围盒。"),
                 Info("3dm 保存 GS 引用，本地缓存需一并保留或随文件传递。透明模型交错、布局和打印暂不支持。"),
-                Info("离线遮挡小样：GSRhinoProbe。USD 导入需要本机可用的 OpenUSD Python 环境。"),
+                Info("离线遮挡小样：GSRhinoProbe。USD 导入 / 导出需要本机可用的 OpenUSD Python 环境。"),
                 Info("GSRhino " + GSRhinoPlugin.DisplayVersion + " · CuriousArc · qrost")
             }
         };
@@ -131,9 +138,47 @@ public sealed class GSRhinoPanel : Panel, IPanel
             }).ConfigureAwait(false);
         }
     }
+    internal static void AddExportFilters(SaveFileDialog dialog)
+    {
+        dialog.Filters.Add(new FileFilter("USDZ · 单文件便携场景", ".usdz"));
+        dialog.Filters.Add(new FileFilter("USD · 二进制场景", ".usd"));
+        dialog.Filters.Add(new FileFilter("USDC · 二进制场景", ".usdc"));
+        dialog.Filters.Add(new FileFilter("USDA · 文本场景", ".usda"));
+    }
+    private async Task ExportAsync()
+    {
+        if (_disposed || _operation is not null) return;
+        CancellationTokenSource? cancellation = null;
+        try
+        {
+            GaussianDocument.ExportSnapshot snapshot = GaussianDocument.CaptureExport(Document(), _exportScope.SelectedIndex == 0);
+            using var dialog = new SaveFileDialog { Title = "导出完整 Gaussian Splat 场景", FileName = "gaussian-scene.usdz" };
+            AddExportFilters(dialog);
+            if (dialog.ShowDialog(this) != DialogResult.Ok) return;
+            cancellation = new CancellationTokenSource(); _operation = cancellation;
+            SetBusy(true); _clock.Restart(); _timer.Start(); _feedback.Text = "";
+            var progress = new Progress<string>(value => GSRhinoHost.Ui(() => { if (!_disposed && ReferenceEquals(_operation, cancellation)) _status.Text = value; }));
+            string result = await GaussianDocument.ExportAsync(dialog.FileName, snapshot, cancellation.Token, progress).ConfigureAwait(false);
+            await GSRhinoHost.OnUi(() => { if (!_disposed) { _status.Text = "导出完成"; _feedback.Text = result; } return true; }).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            await GSRhinoHost.OnUi(() => { if (!_disposed) { _status.Text = ex is OperationCanceledException ? "已取消" : "导出未完成"; _feedback.Text = GSRhinoHost.FriendlyError(ex); } return true; }).ConfigureAwait(false);
+        }
+        finally
+        {
+            await GSRhinoHost.OnUi(() =>
+            {
+                if (ReferenceEquals(_operation, cancellation)) _operation = null;
+                cancellation?.Dispose();
+                if (!_disposed) { _timer.Stop(); _clock.Stop(); SetBusy(false); }
+                return true;
+            }).ConfigureAwait(false);
+        }
+    }
     private void SetBusy(bool busy)
     {
-        _choose.Enabled = _mode.Enabled = _diagnostics.Enabled = _axis.Enabled = _units.Enabled = _scale.Enabled = !busy;
+        _export.Enabled = _exportScope.Enabled = _choose.Enabled = _mode.Enabled = _diagnostics.Enabled = _axis.Enabled = _units.Enabled = _scale.Enabled = !busy;
         _import.Enabled = !busy && !string.IsNullOrWhiteSpace(_path.Text);
         _cancel.Enabled = busy;
     }

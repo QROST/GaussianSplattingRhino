@@ -32,3 +32,7 @@ This is a native mesh/material adapter, not a dedicated compute-shader renderer.
 ## Rendering limits
 
 The current renderer evaluates SH0–3 and quantizes display RGB to 8-bit. HDR output, exact format-specific antialias compensation, arbitrary transparent-object interleaving, nested-block editing, layouts and capture need separate work. Opaque native geometry and basic clipping use Rhino's depth pipeline; the complete platform matrix requires manual verification.
+
+## USD exchange
+
+The native export adapter snapshots top-level GS references and full instance transforms on the UI thread, then uses the shared isolated OpenUSD bridge to encode the scene. No Rhino document/object is read from the worker. Assets are reused by hash without collapsing separate instances. The output uses current document units and Z-up, with atomic destination replacement. See [the exchange contract](usd-exchange.md).

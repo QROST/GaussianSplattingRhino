@@ -134,3 +134,32 @@ public sealed class GSRhinoProbeCommand : Command
         LocalStorage.WriteAtomic(path,Encoding.ASCII.GetBytes(data.ToString()));return path;
     }
 }
+
+[Guid("270EA05A-39CF-4850-9EC2-A8D676BD465C")]
+public sealed class GSRhinoExportCommand : Command
+{
+    public override string EnglishName => "GSRhinoExport";
+    protected override Result RunCommand(RhinoDoc doc, RunMode mode)
+    {
+        try
+        {
+            GaussianDocument.ExportSnapshot snapshot = GaussianDocument.CaptureExport(doc, selectedOnly: true);
+            using var dialog = new Eto.Forms.SaveFileDialog { Title = "导出选中的 GS 块", FileName = "gaussian-scene.usdz" };
+            GSRhinoPanel.AddExportFilters(dialog);
+            if (dialog.ShowDialog(global::Rhino.UI.RhinoEtoApp.MainWindowForDocument(doc)) != Eto.Forms.DialogResult.Ok) return Result.Cancel;
+            global::Rhino.RhinoApp.WriteLine("正在后台导出选中 GS；使用当前文档坐标与单位。如需全部导出或取消功能，请从 GSRhinoPanel 发起。");
+            _ = ExportAsync(dialog.FileName, snapshot);
+            return Result.Success;
+        }
+        catch (Exception ex) { global::Rhino.RhinoApp.WriteLine(GSRhinoHost.FriendlyError(ex)); return Result.Failure; }
+    }
+    private static async Task ExportAsync(string path, GaussianDocument.ExportSnapshot snapshot)
+    {
+        try
+        {
+            string result = await GaussianDocument.ExportAsync(path, snapshot, CancellationToken.None).ConfigureAwait(false);
+            GSRhinoHost.Ui(() => global::Rhino.RhinoApp.WriteLine(result));
+        }
+        catch (Exception ex) { GSRhinoHost.Ui(() => global::Rhino.RhinoApp.WriteLine("GS 导出未完成：" + GSRhinoHost.FriendlyError(ex))); }
+    }
+}

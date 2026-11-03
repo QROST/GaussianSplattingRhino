@@ -18,7 +18,7 @@ internal static class GSRhinoHost
     }
     internal static string FriendlyError(Exception e) => e is OutOfMemoryException
         ? "内存不足，操作未完成；原始文件保留，可释放内存后重试。"
-        : e is OperationCanceledException ? "本地导入已取消；原始文件保留。" : e.Message;
+        : e is OperationCanceledException ? "本地操作已取消；原始文件保留。" : e.Message;
     internal static ImportTarget CaptureTarget(RhinoDoc doc)
     {
         if (global::Rhino.RhinoApp.InvokeRequired) throw new InvalidOperationException("请从 Rhino 界面发起此操作。");
