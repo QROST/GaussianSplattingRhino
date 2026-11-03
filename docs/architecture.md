@@ -35,4 +35,4 @@ The current renderer evaluates SH0–3 and quantizes display RGB to 8-bit. HDR o
 
 ## USD exchange
 
-The native export adapter snapshots top-level GS references and full instance transforms on the UI thread, then uses the shared isolated OpenUSD bridge to encode the scene. No Rhino document/object is read from the worker. Assets are reused by hash without collapsing separate instances. The output uses current document units and Z-up, with atomic destination replacement. See [the exchange contract](usd-exchange.md).
+The native export adapter snapshots top-level GS references and full instance transforms on the UI thread, then uses GSRhino’s isolated OpenUSD bridge to encode the scene. No Rhino document/object is read from the worker. Assets are reused by hash without collapsing separate instances. The output uses current document units and Z-up, with atomic destination replacement. See [the exchange contract](usd-exchange.md).

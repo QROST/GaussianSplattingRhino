@@ -1,6 +1,6 @@
 # GSRhino
 
-**Rhino 8 本地 Gaussian Splat 查看插件。** 作者：**CuriousArc · qrost**。
+**独立的 Rhino 8 本地 Gaussian Splat 查看插件。** 作者：**CuriousArc · qrost**。
 
 [English](readme.md) · 版本 **0.1.0-beta.3** · 本地预览候选版
 

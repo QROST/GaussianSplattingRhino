@@ -6,8 +6,8 @@ Candidate: **0.1.0-beta.3**. Maintainer: **CuriousArc · qrost**. Date: 2026-11-
 
 - Complete Release build: zero warnings/errors; **246 .NET tests passed**, zero failures/skips.
 - **18 actual OpenUSD 26.11 tests passed**, covering all four output extensions, binary USDC identity, USDZ packaging, complete SH0–3, opacity endpoints, empty/duplicate names, antialias metadata, units/up axis, reflection/shear and large-coordinate rebasing. Unsupported or malformed data fails explicitly.
-- Production C# writer/reader cross-project smoke: eight conversions across USD, USDC, USDA and USDZ, with two instances of a shared SH3 asset. Full counts, names, antialias flag, units, world positions, covariance and directional SH colors passed.
-- A local **212,864-splat** scene was exported to USDZ and decoded through a second compatible implementation: full count, every SH coefficient and every activated opacity checked; maximum local-position component difference was **2.384185791015625e-7 source units**. The read/export/read cycle took about **23.1 seconds** on this machine. This is an offline exchange measurement, not a Rhino frame-rate guarantee. The private input/output is not included in source or packages.
+- Production USD interchange check: eight conversions across USD, USDC, USDA and USDZ, with two instances of the same SH3 asset. Full counts, names, antialias flag, units, world positions, covariance and directional SH colors passed.
+- A local **212,864-splat** scene passed a full-data USDZ exchange check: full count, every SH coefficient and every activated opacity checked; maximum local-position component difference was **2.384185791015625e-7 source units**. The read/export/read cycle took about **23.1 seconds** on this machine. This is an offline exchange measurement, not a Rhino frame-rate guarantee. The private input/output is not included in source or packages.
 - Real child-process cancellation/failure retained an existing target, killed the conversion process tree and removed private workspace data. Successful output replaced the target and decoded again.
 - Native import/export UI, cross-unit Rhino document placement and third-party viewer acceptance remain pending. Export follows float32 GS attribute precision; no arbitrary-double lossless claim is made. Extent is not authored for external viewer framing/culling.
 
@@ -27,9 +27,9 @@ Beta.2 reads unambiguous version-1 GS metadata across namespaces, verifies the r
 - Four CPU reference PNGs have closed-form alpha/depth center values. Both procedural Gaussian textures reproduce byte-for-byte. These are mathematical checks, not native screenshots.
 - macOS and Windows Yak candidates pass strict entry allowlisting, identity/platform/target checks and byte-for-byte payload comparisons. Each archive contains 40 files. Hashes and source revisions are recorded in `artifacts/latest-package-mac.json` and `artifacts/latest-package-win.json`.
 - Release Python scripts compile and the macOS shell wrapper passes syntax checking. The Windows PowerShell wrapper has not been executed on Windows.
-- Source/documentation naming checks found no prior product branding or developer home paths. Public project attribution uses CuriousArc and qrost. Required third-party copyright notices are preserved.
+- Source/documentation identity checks passed; no developer home paths are included. Public project attribution uses CuriousArc and qrost. Required third-party copyright notices are preserved.
 
-The native display implementation incorporates previously tested Apple Silicon Mac behavior, including colored anisotropic splats, improved navigation, basic clipping and deferred display-mode registration. This is a reused implementation baseline, not native acceptance of the newly assembled GSRhino package.
+Native GSRhino acceptance remains pending for colored anisotropic splats, navigation, clipping and display-mode registration. Automated checks do not establish these host results.
 
 ## Reproduce
 

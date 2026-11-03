@@ -1,6 +1,6 @@
 # GSRhino
 
-**A local Gaussian splat viewer for Rhino 8.** By **CuriousArc · qrost**.
+**An independent local Gaussian splat viewer for Rhino 8.** By **CuriousArc · qrost**.
 
 [简体中文](readme.zh-CN.md) · Version **0.1.0-beta.3** · Local preview candidate
 
