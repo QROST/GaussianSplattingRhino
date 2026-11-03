@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static official OpenUSD GS -> local binary PLY parts + a small manifest.
+"""Static official OpenUSD GS exchange using canonical binary PLY parts and a small manifest.
 
 Run in an isolated usd-core==26.11 interpreter. No networking, cloud service, point-cloud conversion,
 renderer, or third-party USD file-format plugins are required. USD composition is delegated to OpenUSD.
@@ -27,6 +27,16 @@ def finite(values, label):
     result = tuple(float(v) for v in values)
     require(all(math.isfinite(v) for v in result), label + " contains non-finite values.")
     return result
+
+
+def numeric_vector3(value, label):
+    try:
+        components = tuple(value)
+    except TypeError as error:
+        raise UnsupportedUsd(label + " must contain three numeric values.") from error
+    require(len(components) == 3 and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in components),
+            label + " must contain three numeric values.")
+    return finite(components, label)
 
 
 def digest(path):
@@ -100,6 +110,15 @@ def write_part(prim, output, index, cache, UsdGeom, UsdVol, UsdShade):
     if sh is not None:
         require(len(sh) == count * coefficients, label + f": SH coefficient count {len(sh)} does not match {count} splats at degree {degree}.")
     transform = affine_values(cache.GetLocalToWorldTransform(prim), label)
+    # Optional neutral interchange hints restore the source local frame without changing standard USD world geometry.
+    origin_value = prim.GetCustomDataByKey("gaussianSplatting:localOrigin")
+    origin = (0.0, 0.0, 0.0) if origin_value is None else numeric_vector3(origin_value, label + ": localOrigin")
+    if origin_value is not None:
+        transform[9:] = finite((transform[9 + row] - sum(transform[row * 3 + col] * origin[col] for col in range(3)) for row in range(3)), label + ": restored translation")
+    source_name = prim.GetCustomDataByKey("gaussianSplatting:sourceName")
+    require(source_name is None or isinstance(source_name, str), label + ": sourceName must be a string.")
+    antialiased = prim.GetCustomDataByKey("gaussianSplatting:antialiased")
+    require(antialiased is None or isinstance(antialiased, bool), label + ": antialiased must be boolean.")
     filename = f"part-{index:06d}.ply"
     header = ["ply", "format binary_little_endian 1.0", "comment GSRhino official static USD Gaussian bridge", f"element vertex {count}"]
     fields = ("x", "y", "z", "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3", "opacity")
@@ -111,7 +130,7 @@ def write_part(prim, output, index, cache, UsdGeom, UsdVol, UsdShade):
     with open(output / filename, "wb") as stream:
         stream.write("\n".join(header).encode("ascii"))
         for i in range(count):
-            position = finite(positions[i], label + ": positions")
+            position = finite((float(positions[i][j]) + origin[j] for j in range(3)), label + ": restored positions")
             scale = finite(scales[i], label + ": scales") if scales is not None else (1.0, 1.0, 1.0)
             require(all(v > 0 for v in scale), label + f": splat {i} has a nonpositive scale; no epsilon substitution was applied.")
             if orientations is None:
@@ -127,7 +146,7 @@ def write_part(prim, output, index, cache, UsdGeom, UsdVol, UsdShade):
             values = [finite(sh[i * coefficients + k], label + ": SH") for k in range(coefficients)] if sh is not None else [(0.0, 0.0, 0.0)]
             ply_sh = list(values[0]) + [values[k][channel] for channel in range(3) for k in range(1, coefficients)]
             stream.write(record.pack(*position, *(math.log(v) for v in scale), *rotation, logit, *ply_sh))
-    return {"name": label, "file": filename, "count": count, "degree": degree, "transform": transform,
+    return {"name": label, "sourceName": label if source_name is None else source_name, "antialiased": bool(antialiased), "file": filename, "count": count, "degree": degree, "transform": transform,
             "projectionModeHint": str(gaussian.GetProjectionModeHintAttr().Get()),
             "sortingModeHint": str(gaussian.GetSortingModeHintAttr().Get())}
 
@@ -199,15 +218,154 @@ def convert(input_path, output):
         json.dump(manifest, stream, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
 
 
+
+def float32(value, label, positive=False):
+    require(math.isfinite(value), label + " is non-finite.")
+    try:
+        result = struct.unpack("<f", struct.pack("<f", value))[0]
+    except (OverflowError, struct.error) as error:
+        raise UnsupportedUsd(label + " exceeds the official float32 schema precision.") from error
+    require(math.isfinite(result) and (not positive or result > 0), label + " cannot be represented by the official float32 schema. No clamping or epsilon substitution was applied.")
+    return result
+
+
+def canonical_payload(directory, part):
+    """Validate our transport only, not a general PLY parser. Payload length is checked before USD arrays are allocated."""
+    count, degree = part["count"], part["degree"]
+    require(type(count) is int and count >= 0, "Export part count is invalid.")
+    require(type(degree) is int and 0 <= degree <= 3, "Export SH degree must be 0 through 3.")
+    filename = part["file"]
+    require(isinstance(filename, str) and filename and Path(filename).name == filename and not any(c in filename for c in ("/", "\\", ":")), "Export payload must be a local filename.")
+    path = directory / filename
+    require(path.is_file() and not path.is_symlink(), "Export payload is missing or is a symbolic link.")
+    coefficients = (degree + 1) ** 2
+    fields = ("x", "y", "z", "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3", "opacity")
+    expected = ["ply", "format binary_little_endian 1.0", f"element vertex {count}"]
+    expected += ["property double " + name for name in fields]
+    expected += ["property float f_dc_" + str(i) for i in range(3)]
+    expected += ["property float f_rest_" + str(i) for i in range(3 * (coefficients - 1))]
+    expected += ["end_header"]
+    stream = open(path, "rb")
+    try:
+        for line in expected:
+            while True:
+                actual = stream.readline(4096)
+                require(actual and actual.endswith(b"\n"), "Canonical PLY header is missing or too long.")
+                actual = actual.decode("ascii").rstrip("\r\n")
+                if not actual.startswith("comment "):
+                    break
+            require(actual == line, "Canonical PLY header disagrees with the export manifest: expected " + line)
+        record = struct.Struct("<11d" + "f" * (3 * coefficients))
+        require(path.stat().st_size - stream.tell() == count * record.size, "Canonical PLY payload length does not match its complete particle count.")
+        return stream, record
+    except BaseException:
+        stream.close()
+        raise
+
+
+def export(input_path, output, file_format):
+    """Author the official static GS schema. Atomic final replacement belongs to the C# caller."""
+    try:
+        from pxr import Gf, Sdf, Usd, UsdGeom, UsdUtils, UsdVol, Vt
+    except ImportError as error:
+        raise UnsupportedUsd("OpenUSD runtime is missing. Install usd-core==26.11 using the GSRhino USD setup.") from error
+    require(Usd.GetVersion() == (0, 26, 11), "This bridge requires usd-core==26.11; another OpenUSD runtime version was found.")
+    require(file_format in ("usd", "usda", "usdc", "usdz"), "Unsupported USD export container.")
+    with open(input_path, encoding="utf-8") as stream:
+        manifest = json.load(stream)
+    require(manifest.get("protocol") == 1 and manifest.get("openUsdVersion") == "26.11", "Unsupported USD export transport protocol.")
+    axis, units = manifest["upAxis"], manifest["metersPerUnit"]
+    require(axis in ("Y", "Z") and type(units) in (float, int) and math.isfinite(units) and units > 0, "USD export requires explicit Y/Z up axis and positive metersPerUnit.")
+    parts = manifest["parts"]
+    require(isinstance(parts, list) and parts, "No Gaussian parts were supplied for export.")
+    scene = Usd.Stage.CreateInMemory()
+    root = UsdGeom.Xform.Define(scene, "/GaussianScene")
+    scene.SetDefaultPrim(root.GetPrim())
+    UsdGeom.SetStageUpAxis(scene, axis)
+    UsdGeom.SetStageMetersPerUnit(scene, units)
+    scene.GetRootLayer().documentation = "Official static Gaussian splats. Positions are rebased per part; positions, scales, normalized orientations and activated opacity use float32. Object transforms use matrix4d. Normal float rounding is expected; this is not arbitrary-double lossless storage. Neutral gaussianSplatting customData preserves sourceName, localOrigin and the antialiased flag."
+    total, files = 0, set()
+    for index, part in enumerate(parts):
+        name = part["name"]
+        require(isinstance(name, str), "Export sourceName must be a string; empty and duplicate names are allowed.")
+        antialiased = part.get("antialiased", False)
+        require(type(antialiased) is bool, "Export antialiased flag must be boolean.")
+        origin = numeric_vector3(part["origin"], "Export localOrigin")
+        transform = finite(part["transform"], "Export transform")
+        require(len(transform) == 12, "Export transform must contain twelve values.")
+        translation = finite((transform[9 + row] + sum(transform[row * 3 + col] * origin[col] for col in range(3)) for row in range(3)), "Rebased object translation")
+        matrix = Gf.Matrix4d(transform[0], transform[3], transform[6], 0,
+                            transform[1], transform[4], transform[7], 0,
+                            transform[2], transform[5], transform[8], 0,
+                            *translation, 1)
+        affine_values(matrix, "Export transform")
+        require(part["file"] not in files, "Export payload filenames must be unique.")
+        files.add(part["file"])
+        stream, record = canonical_payload(input_path.parent, part)
+        with stream:
+            count, degree = part["count"], part["degree"]
+            coefficients = (degree + 1) ** 2
+            positions, scales = Vt.Vec3fArray(count), Vt.Vec3fArray(count)
+            orientations, opacities = Vt.QuatfArray(count), Vt.FloatArray(count)
+            sh = Vt.Vec3fArray(count * coefficients)
+            for i in range(count):
+                data = finite(record.unpack(stream.read(record.size)), "Canonical Gaussian")
+                positions[i] = Gf.Vec3f(*(float32(data[j] - origin[j], "Rebased position") for j in range(3)))
+                try:
+                    scales[i] = Gf.Vec3f(*(float32(math.exp(data[3 + j]), "Gaussian scale", positive=True) for j in range(3)))
+                except OverflowError as error:
+                    raise UnsupportedUsd("Gaussian scale exceeds the official float32 schema precision.") from error
+                q = data[6:10]
+                magnitude = max(abs(v) for v in q)
+                require(magnitude > 0, "Canonical Gaussian has a zero quaternion.")
+                q = tuple(v / magnitude for v in q)
+                norm = math.sqrt(sum(v * v for v in q))
+                orientations[i] = Gf.Quatf(*(float32(v / norm, "Gaussian orientation") for v in q))
+                logit = data[10]
+                opacity = 1 / (1 + math.exp(-logit)) if logit >= 0 else math.exp(logit) / (1 + math.exp(logit))
+                opacities[i] = float32(opacity, "Gaussian opacity")
+                sh[i * coefficients] = Gf.Vec3f(*data[11:14])
+                for k in range(1, coefficients):
+                    sh[i * coefficients + k] = Gf.Vec3f(*(data[14 + channel * (coefficients - 1) + k - 1] for channel in range(3)))
+        gaussian = UsdVol.ParticleField3DGaussianSplat.Define(scene, f"/GaussianScene/Part{index:06d}")
+        prim = gaussian.GetPrim()
+        prim.SetDisplayName(name)
+        prim.SetCustomDataByKey("gaussianSplatting:sourceName", name)
+        prim.SetCustomDataByKey("gaussianSplatting:antialiased", antialiased)
+        prim.SetCustomDataByKey("gaussianSplatting:localOrigin", Gf.Vec3d(*origin))
+        UsdGeom.Xformable(gaussian).AddTransformOp().Set(matrix)
+        gaussian.CreatePositionsAttr(positions)
+        gaussian.CreateScalesAttr(scales)
+        gaussian.CreateOrientationsAttr(orientations)
+        gaussian.CreateOpacitiesAttr(opacities)
+        gaussian.CreateRadianceSphericalHarmonicsDegreeAttr(degree)
+        gaussian.CreateRadianceSphericalHarmonicsCoefficientsAttr(sh)
+        total += count
+    require(total > 0, "The scene contains no Gaussian particles to export.")
+    target = output / ("result." + file_format)
+    if file_format == "usdz":
+        binary = output / "scene.usdc"
+        require(scene.GetRootLayer().Export(str(binary)), "OpenUSD failed to write the binary root layer.")
+        require(UsdUtils.CreateNewUsdzPackage(Sdf.AssetPath(str(binary)), str(target)), "OpenUSD failed to create the USDZ package.")
+    else:
+        # .usd is explicitly binary, independent of ambient file-format preferences.
+        require(scene.GetRootLayer().Export(str(target), args={"format": "usda" if file_format == "usda" else "usdc"}), "OpenUSD failed to export the Gaussian stage.")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--export", action="store_true", dest="export_mode")
+    parser.add_argument("--format", choices=("usd", "usda", "usdc", "usdz"))
     args = parser.parse_args()
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
     try:
-        convert(Path(args.input), output)
+        if args.export_mode:
+            export(Path(args.input), output, args.format)
+        else:
+            convert(Path(args.input), output)
     except Exception as error:
         message = str(error) or type(error).__name__
         with open(output / "error.json", "w", encoding="utf-8") as stream:

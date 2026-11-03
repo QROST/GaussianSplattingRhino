@@ -27,6 +27,22 @@ public sealed class UsdGaussianReaderTests
         Assert.Contains("fixture diagnostic", result.Warnings!);
     }
 
+    [Fact]
+    public void PreservesEmptyAndDuplicateSourceNamesAndAntialiasedFlagSeparateFromUniquePrimPaths()
+    {
+        using var fixture = new BridgeFixture();
+        for (int i = 0; i < 3; i++)
+        {
+            string file = $"part-{i}.ply"; fixture.WritePly(file, 0);
+            fixture.Parts.Add(new { name = $"/Part{i}", file, count = 1, degree = 1,
+                sourceName = i == 2 ? "" : "duplicate 用户 / name", antialiased = i == 1,
+                transform = new double[] { 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0 } });
+        }
+        fixture.WriteManifest(); GaussianScene scene = UsdGaussianReader.ReadBridgeOutput(fixture.Directory);
+        Assert.Equal(new[] { "duplicate 用户 / name", "duplicate 用户 / name", "" }, scene.Parts.Select(p => p.Name));
+        Assert.Equal(new[] { false, true, false }, scene.Parts.Select(p => p.Antialiased));
+    }
+
     [Theory]
     [InlineData("../outside.ply")]
     [InlineData("folder/part.ply")]
