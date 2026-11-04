@@ -85,14 +85,37 @@ def affine_values(matrix, label):
 
 def write_part(prim, output, index, cache, UsdGeom, UsdVol, UsdShade):
     label = str(prim.GetPath())
-    require(UsdGeom.Imageable(prim).ComputeVisibility() != UsdGeom.Tokens.invisible,
-            label + ": invisible Gaussian prims are not supported by this static import; export the intended visible scene explicitly.")
-    material, _ = UsdShade.MaterialBindingAPI(prim).ComputeBoundMaterial()
-    require(not material, label + ": material-bound Gaussian radiance is not supported; export the SH radiance explicitly.")
+    imageable = UsdGeom.Imageable(prim)
+    purpose = imageable.ComputePurpose()
+    require(purpose in (UsdGeom.Tokens.default_, UsdGeom.Tokens.render, UsdGeom.Tokens.proxy, UsdGeom.Tokens.guide),
+            label + ": unsupported Gaussian purpose " + str(purpose))
+    # Includes inherited overall visibility and purpose-specific VisibilityAPI opinions, also on instance proxies.
+    require(imageable.ComputeEffectiveVisibility(purpose) != UsdGeom.Tokens.invisible,
+            label + ": invisible Gaussian prims are not supported by this static import (purpose " + str(purpose) + "); export the intended visible scene explicitly.")
+    binding = UsdShade.MaterialBindingAPI(prim)
+    material_purposes = set(binding.GetMaterialPurposes())
+    ancestor = prim
+    while ancestor and not ancestor.IsPseudoRoot():
+        # Discover custom purpose tokens as well as allPurpose/preview/full. Resolution below handles collection membership,
+        # inheritance and explicit unbinding; the presence of a binding API or an unrelated collection alone is not an error.
+        for relationship in ancestor.GetRelationships():
+            tokens = str(relationship.GetName()).split(":")
+            if tokens[:2] == ["material", "binding"]:
+                if len(tokens) == 3 and tokens[2] != "collection":
+                    material_purposes.add(tokens[2])
+                elif len(tokens) == 5 and tokens[2] == "collection":
+                    material_purposes.add(tokens[3])
+        ancestor = ancestor.GetParent()
+    for material_purpose in sorted(material_purposes):
+        material, _ = binding.ComputeBoundMaterial(material_purpose)
+        require(not material, label + ": material-bound Gaussian radiance is not supported (material purpose " + (str(material_purpose) or "allPurpose") + "); export the SH radiance explicitly.")
     known_particle_apis = {"ParticleFieldPositionAttributeAPI", "ParticleFieldPositionBaseAPI", "ParticleFieldOrientationAttributeAPI",
                            "ParticleFieldScaleAttributeAPI", "ParticleFieldOpacityAttributeAPI", "ParticleFieldKernelGaussianEllipsoidAPI",
                            "ParticleFieldKernelBaseAPI", "ParticleFieldSphericalHarmonicsAttributeAPI", "ParticleFieldRadianceBaseAPI"}
-    for api in prim.GetAppliedSchemas():
+    # GetAppliedSchemas omits unregistered APIs. PrimTypeInfo retains the composed authored tokens, including unknown
+    # extensions inherited from classes/references. Composed tokens also respect removal by stronger layer opinions.
+    apis = set(prim.GetAppliedSchemas()) | set(prim.GetPrimTypeInfo().GetAppliedAPISchemas())
+    for api in sorted(apis):
         affects_splats = str(api).startswith("ParticleField") or any(word in str(api).lower() for word in ("gaussian", "splat", "compress", "nurec"))
         require(not affects_splats or api in known_particle_apis, label + ": unsupported Gaussian API schema " + str(api))
     for attribute in prim.GetAttributes():

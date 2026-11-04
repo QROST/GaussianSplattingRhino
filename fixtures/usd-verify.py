@@ -12,7 +12,7 @@ import tempfile
 import unittest
 import zipfile
 
-from pxr import Gf, Sdf, Usd, UsdGeom, UsdUtils, UsdVol, Vt
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdShade, UsdUtils, UsdVol, Vt
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("gsrhino_usd_bridge", ROOT / "scripts" / "usd_bridge.py")
@@ -244,6 +244,139 @@ class Integration(unittest.TestCase):
         with self.assertRaisesRegex(bridge.UnsupportedUsd, "escapes its package"):
             self.decode(archive)
 
+
+    def semantic_scene(self, stem, instanced=False):
+        path = self.directory / (stem + ".usda")
+        scene = stage(path)
+        parent = UsdGeom.Xform.Define(scene, "/World").GetPrim()
+        if instanced:
+            parent.GetReferences().AddReference("usd-prototype.usda")
+            parent.SetInstanceable(True)
+            splat = scene.GetPrimAtPath("/World/Splat")
+            self.assertTrue(splat.IsInstanceProxy())
+        else:
+            splat = gs(scene, "/World/Splat", degree=1, count=1).GetPrim()
+        return path, scene, parent, splat
+
+    def test_purpose_visibility_rejects_hidden_direct_inherited_and_instanced_splats(self):
+        for purpose in ("render", "proxy", "guide"):
+            for placement in ("direct", "inherited", "instance"):
+                with self.subTest(purpose=purpose, placement=placement):
+                    path, scene, parent, splat = self.semantic_scene("hidden-" + purpose + "-" + placement, placement == "instance")
+                    authored = splat if placement == "direct" else parent
+                    UsdGeom.Imageable(authored).CreatePurposeAttr(purpose)
+                    visibility = UsdGeom.VisibilityAPI.Apply(authored)
+                    visibility.GetPurposeVisibilityAttr(purpose).Set(UsdGeom.Tokens.invisible)
+                    self.assertEqual(UsdGeom.Tokens.invisible, UsdGeom.Imageable(splat).ComputeEffectiveVisibility(purpose))
+                    scene.GetRootLayer().Save()
+                    with self.assertRaisesRegex(bridge.UnsupportedUsd, "invisible Gaussian.*purpose " + purpose):
+                        self.decode(path)
+
+    def test_effective_visibility_accepts_visible_override_and_unrelated_purpose_opinions(self):
+        for purpose in ("render", "proxy", "guide"):
+            with self.subTest(purpose=purpose):
+                path, scene, parent, splat = self.semantic_scene("visible-override-" + purpose)
+                UsdGeom.Imageable(parent).CreatePurposeAttr(purpose)
+                UsdGeom.VisibilityAPI.Apply(parent).GetPurposeVisibilityAttr(purpose).Set(UsdGeom.Tokens.invisible)
+                UsdGeom.VisibilityAPI.Apply(splat).GetPurposeVisibilityAttr(purpose).Set(UsdGeom.Tokens.visible)
+                self.assertEqual(UsdGeom.Tokens.visible, UsdGeom.Imageable(splat).ComputeEffectiveVisibility(purpose))
+                scene.GetRootLayer().Save()
+                manifest, _ = self.decode(path)
+                self.assertEqual(1, sum(part["count"] for part in manifest["parts"]))
+        path, scene, parent, splat = self.semantic_scene("visible-instance", True)
+        UsdGeom.Imageable(parent).CreatePurposeAttr(UsdGeom.Tokens.proxy)
+        visibility = UsdGeom.VisibilityAPI.Apply(parent)
+        visibility.CreateRenderVisibilityAttr(UsdGeom.Tokens.invisible)
+        visibility.CreateProxyVisibilityAttr(UsdGeom.Tokens.visible)
+        scene.GetRootLayer().Save()
+        manifest, _ = self.decode(path)
+        self.assertEqual("/World/Splat", manifest["parts"][0]["name"])
+
+    def test_overall_visibility_cannot_be_overridden_by_visible_purpose(self):
+        path, scene, parent, splat = self.semantic_scene("overall-invisible", True)
+        UsdGeom.Imageable(parent).CreatePurposeAttr(UsdGeom.Tokens.render)
+        UsdGeom.Imageable(parent).CreateVisibilityAttr(UsdGeom.Tokens.invisible)
+        UsdGeom.VisibilityAPI.Apply(parent).CreateRenderVisibilityAttr(UsdGeom.Tokens.visible)
+        scene.GetRootLayer().Save()
+        with self.assertRaisesRegex(bridge.UnsupportedUsd, "invisible Gaussian"):
+            self.decode(path)
+
+    def test_material_purposes_reject_direct_inherited_collection_and_instance_bindings(self):
+        for purpose in ("", "preview", "full", "customLook"):
+            for placement in ("direct", "inherited", "collection", "instance"):
+                with self.subTest(purpose=purpose, placement=placement):
+                    path, scene, parent, splat = self.semantic_scene("material-" + (purpose or "all") + "-" + placement, placement == "instance")
+                    material = UsdShade.Material.Define(scene, "/Material")
+                    authored = splat if placement == "direct" else parent
+                    binding = UsdShade.MaterialBindingAPI.Apply(authored)
+                    if placement == "collection":
+                        collection = Usd.CollectionAPI.Apply(parent, "gaussians")
+                        collection.CreateIncludesRel().AddTarget(splat.GetPath())
+                        binding.Bind(collection, material, materialPurpose=purpose)
+                    else:
+                        binding.Bind(material, materialPurpose=purpose)
+                    self.assertTrue(UsdShade.MaterialBindingAPI(splat).ComputeBoundMaterial(purpose)[0])
+                    scene.GetRootLayer().Save()
+                    with self.assertRaisesRegex(bridge.UnsupportedUsd, "material-bound Gaussian.*material purpose " + (purpose or "allPurpose")):
+                        self.decode(path)
+
+    def test_material_api_unbound_and_nonmember_collections_do_not_reject_valid_gaussians(self):
+        for instanced in (False, True):
+            with self.subTest(instanced=instanced):
+                path, scene, parent, splat = self.semantic_scene("unbound-" + str(instanced), instanced)
+                material = UsdShade.Material.Define(scene, "/Material")
+                binding = UsdShade.MaterialBindingAPI.Apply(parent)
+                binding.Bind(material, materialPurpose="preview")
+                binding.UnbindDirectBinding(materialPurpose="preview")
+                other = UsdGeom.Xform.Define(scene, "/Other").GetPrim()
+                collection = Usd.CollectionAPI.Apply(parent, "other")
+                collection.CreateIncludesRel().AddTarget(other.GetPath())
+                binding.Bind(collection, material, materialPurpose="customLook")
+                self.assertFalse(UsdShade.MaterialBindingAPI(splat).ComputeBoundMaterial("preview")[0])
+                self.assertFalse(UsdShade.MaterialBindingAPI(splat).ComputeBoundMaterial("customLook")[0])
+                scene.GetRootLayer().Save()
+                manifest, _ = self.decode(path)
+                self.assertEqual(1, sum(part["count"] for part in manifest["parts"]))
+
+    def test_unregistered_gaussian_apis_reject_direct_class_inherited_and_instance_composition(self):
+        for api in ("CustomGaussianRadianceAPI", "CustomCompressedAttributeAPI", "ParticleFieldCustomAPI"):
+            for composition in ("direct", "class", "instance"):
+                with self.subTest(api=api, composition=composition):
+                    path, scene, parent, splat = self.semantic_scene("unknown-" + api + "-" + composition, composition == "instance")
+                    source = None
+                    if composition == "class":
+                        authored = scene.CreateClassPrim("/Defaults")
+                        splat.GetInherits().AddInherit(authored.GetPath())
+                    elif composition == "instance":
+                        source = Usd.Stage.Open(str(self.directory / "usd-prototype.usda"))
+                        authored = source.GetPrimAtPath("/Asset/Splat")
+                    else:
+                        authored = splat
+                    authored.SetMetadata("apiSchemas", Sdf.TokenListOp.CreateExplicit([api]))
+                    if source:
+                        source.GetRootLayer().Save()
+                    self.assertNotIn(api, splat.GetAppliedSchemas())
+                    self.assertIn(api, splat.GetPrimTypeInfo().GetAppliedAPISchemas())
+                    scene.GetRootLayer().Save()
+                    with self.assertRaisesRegex(bridge.UnsupportedUsd, "unsupported Gaussian API schema " + api):
+                        self.decode(path)
+                    if source:
+                        authored.ClearMetadata("apiSchemas")
+                        source.GetRootLayer().Save()
+
+    def test_removed_unknown_api_and_unrelated_metadata_are_not_false_positives(self):
+        path, scene, parent, splat = self.semantic_scene("composed-api-removal")
+        defaults = scene.CreateClassPrim("/Defaults")
+        defaults.SetMetadata("apiSchemas", Sdf.TokenListOp.CreateExplicit(["CustomCompressedAttributeAPI"]))
+        splat.GetInherits().AddInherit(defaults.GetPath())
+        override = Sdf.TokenListOp()
+        override.deletedItems = ["CustomCompressedAttributeAPI"]
+        override.prependedItems = ["CustomAnnotationAPI"]
+        splat.SetMetadata("apiSchemas", override)
+        self.assertNotIn("CustomCompressedAttributeAPI", splat.GetPrimTypeInfo().GetAppliedAPISchemas())
+        scene.GetRootLayer().Save()
+        manifest, _ = self.decode(path)
+        self.assertEqual(1, sum(part["count"] for part in manifest["parts"]))
 
     def test_export_all_containers_roundtrip_full_fields_names_units_and_large_local_origin(self):
         transport = self.directory / "transport"; transport.mkdir()
