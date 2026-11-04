@@ -2,7 +2,7 @@
 
 **An independent local Gaussian splat viewer for Rhino 8.** By **CuriousArc · qrost**.
 
-[简体中文](readme.zh-CN.md) · Version **0.1.0-beta.3** · Local preview candidate
+[简体中文](readme.zh-CN.md) · Version **0.1.0-beta.4** · Local preview candidate
 
 Import Gaussian scenes and view their anisotropic splats, opacity and view-dependent SH color inside Rhino's modeling viewport. GSRhino keeps full supported Gaussian data; it does not replace splats with point clouds or silently reduce their count. No account or API key is needed.
 
@@ -36,7 +36,11 @@ On Windows use `scripts/build-package.ps1`; install the Windows candidate throug
 
 ### Optional USD / USDZ runtime
 
-PLY, SPLAT and SPZ need no extra runtime. For USD formats, run the installer once with **Python 3.11–3.14**:
+PLY, SPLAT and SPZ need no extra runtime. For USD formats, install **Python 3.11–3.14** (3.12 is used in the examples).
+
+**Already installed the Yak package?** Open `GSRhinoPanel`, choose **USD 安装指引** (USD setup instructions), then **复制安装命令** (Copy setup command). The copied command points to the script inside the installed package, including paths containing spaces. Run it in macOS Terminal or Windows PowerShell, then click **检查 USD 运行时** (Check USD runtime). The check is local; it does not install anything. You do not need a source checkout. If you use a Python version other than 3.12, adjust the executable/version in the copied command.
+
+**From a source checkout**, run:
 
 ```sh
 python3.12 scripts/setup-usd.py
@@ -64,7 +68,7 @@ Choose `.usdz` for a self-contained package, `.usd`/`.usdc` for binary USD, or `
 
 ### Existing 3DM documents
 
-Version 0.1.0-beta.2 also recognizes compatible version-1 GS block references produced under another namespace. Open the existing 3DM and enable `GSRhinoMode`; no re-import is needed when its referenced local PLY is available. The reader verifies the recorded SHA-256 and complete Gaussian data, copies it into GSRhino's own cache, and keeps the existing instance transform. It does not rewrite the document or source file. Missing/corrupt references retain their boxes and report a specific error.
+Version 0.1.0-beta.2 also recognizes compatible version-1 GS block references produced under another namespace. Open the existing 3DM and enable `GSRhinoMode`; no re-import is needed when its referenced local PLY is available. The reader verifies the recorded SHA-256 and complete Gaussian data, copies it into GSRhino's own cache, and keeps the existing instance transform. It does not rewrite the document or source file. Missing/corrupt references retain their boxes and report a specific error. A corrupt cache is recovered automatically when a valid referenced PLY is available. Otherwise re-import the original file; a verified replacement can repair the existing cache. The damaged bytes are kept beside it as a `.corrupt-*` backup, and valid caches are never replaced by this recovery.
 
 ## Storage and current limits
 

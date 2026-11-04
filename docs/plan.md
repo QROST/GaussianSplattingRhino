@@ -1,7 +1,7 @@
 # GSRhino implementation plan
 
 GSRhino is an independent local Gaussian splat viewer for Rhino 8, by CuriousArc and qrost.
-Version target: **0.1.0-beta.3**. Local candidates are not public releases.
+Version target: **0.1.0-beta.4**. Local candidates are not public releases.
 
 1. Establish the standalone repository, package identity, Core contracts, and renderer regression fixtures.
 2. Implement the native viewport: anisotropic GS, SH0–3, opacity, background sorting, cancellable import, stable bounds and deferred display-mode registration.
@@ -15,8 +15,10 @@ USD/USDZ decoding uses a pinned, isolated OpenUSD process. PLY/SPLAT/SPZ do not 
 
 ## Current milestone
 
-The standalone viewer, file importers, source/cache preservation, regression fixtures and bilingual documentation are implemented. Release compilation, 201 offline .NET tests, 13 real OpenUSD checks and local Mac/Windows archive verification passed. The initial development version is 0.1.0-beta.1. Native GSRhino acceptance and dedicated GPU-renderer/performance work remain separate milestones.
+The standalone viewer, file importers, USD export, source/cache preservation, regression fixtures and bilingual documentation are implemented. The current local candidate is 0.1.0-beta.4; exact automated evidence is recorded in [validation](validation.md). Native GSRhino acceptance and dedicated GPU-renderer/performance work remain separate milestones.
 
 Beta.2 adds read-only compatibility for existing version-1 GS references and truthful empty/loading/error display status. Native verification of this repair remains pending the user's restart and existing-document retest.
 
 Beta.3 adds explicit selected/all top-level GS export to the USD family with cancellation and atomic destination replacement. USDZ is a self-contained GS exchange package; arbitrary Rhino geometry and third-party viewer support are outside this milestone.
+
+Beta.4 repairs fractional-DPI sampling, partial-frame status, purpose-aware USD visibility/material validation and corrupt-cache recovery. The panel provides a local USD runtime check and installed-package setup instructions. Native DPI/navigation, restart, Windows and Intel Mac acceptance remain separate from automated tests.

@@ -1,6 +1,18 @@
 # Validation
 
-Candidate: **0.1.0-beta.3**. Maintainer: **CuriousArc · qrost**. Date: 2026-11-02.
+Candidate: **0.1.0-beta.4**. Maintainer: **CuriousArc · qrost**. Date: 2026-11-04.
+
+## Beta.4 prerelease repairs
+
+- Complete Release solution build on Apple Silicon macOS: **zero warnings/errors; 283 .NET tests passed**, zero failures/skips. The four inherited-pipe process regressions run on Unix and are explicitly skipped on Windows; they are not Windows execution evidence.
+- **25 actual OpenUSD 26.11 tests passed**, including inherited and instanced purpose visibility, preview/full/custom-purpose material bindings, collection binding, unregistered Gaussian APIs and valid composed overrides/removals. Earlier full-data interchange coverage remains included.
+- Fractional-DPI tests exercise 125%/150% integer rounding, alternating logical/device size reports, both projection types, real resize and real camera movement. Normalization follows native-size authentication and preserves strict pose/frustum comparisons. The first accepted sampling grid remains stable until independently observed window bounds change.
+- Partial loading/error status remains visible while a healthy resource renders; only a fully ready accepted frame hides the status overlay. Writing objects into the document is reported separately from viewport readiness.
+- Cache tests cover verified fallback, corrupt-target replacement, valid-cache reuse, cancellation and concurrent recovery. Eight additional independent processes on macOS waited on the same held lock, then produced one repair and seven reuses; the original corrupt bytes were retained exactly once. Windows execution remains unverified.
+- The panel now locates the setup script inside the installed package, copies a shell-quoted command, and probes the local OpenUSD version/schema without installing anything. Cancellation also bounds output collection when a launcher exits before its pipes close. The real 15-second readiness timeout and public USD import cancellation/workspace cleanup passed. Closing a check restores an actionable panel status.
+- The actual C# → isolated OpenUSD process → GS decoding path passed with `usd-two-parts.usdz`: two parts, four splats, complete SH3, Z-up, 0.001 meters/unit, and no decoder warnings. The default installed runtime reported ready.
+- Independent native verification remains pending: actual window-bound behavior across monitors, navigation, depth/clipping, restart and Windows/Intel Mac. A one-pixel resize observed before the next native inventory refresh may settle on the next normal draw; polling does not force continuous redraws.
+
 
 ## Beta.3 USD import/export
 
@@ -41,7 +53,7 @@ dotnet run --project tools/GSRhino.Reference -c Release -- --output artifacts/re
 dotnet run --project tools/GSRhino.Reference -c Release -- --inspect fixtures/usd-two-parts.usdz
 ```
 
-Run `fixtures/usd-verify.py` with the private USD runtime's Python executable to repeat the 18 current integration checks. Ordinary .NET tests do not require that optional runtime. The SPZ fixture generator, upstream revision and digests are in `fixtures/spz-official-provenance.json`.
+Run `fixtures/usd-verify.py` with the private USD runtime's Python executable to repeat the 25 current integration checks. Ordinary .NET tests do not require that optional runtime. The SPZ fixture generator, upstream revision and digests are in `fixtures/spz-official-provenance.json`.
 
 ## Remaining native acceptance
 
