@@ -387,14 +387,7 @@ internal static partial class GaussianDocument
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
     private static void Publish(string temporary, string destination, string hash, CancellationToken ct)
-    {
-        if (!File.Exists(destination))
-        {
-            try { File.Move(temporary, destination); }
-            catch (IOException) when (File.Exists(destination)) { }
-        }
-        if (Hash(destination, ct) != hash) throw new IOException("本地缓存校验失败，原始文件未修改。");
-    }
+        => GaussianCachePublisher.Publish(temporary, destination, hash, ct);
     private static string Hash(string path, CancellationToken ct)
     {
         using var input = File.OpenRead(path);

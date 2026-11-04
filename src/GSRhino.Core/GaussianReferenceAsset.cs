@@ -14,12 +14,21 @@ public static class GaussianReferenceAsset
         if (hash.Length != 64 || hash.Any(c => !Uri.IsHexDigit(c))) throw new InvalidDataException("Invalid GS reference hash.");
         hash = hash.ToLowerInvariant();
         string destination = Path.Combine(cacheDirectory, hash + ".ply");
-        if (File.Exists(destination)) return ReadVerified(destination, hash, false, ct);
+        Exception? cacheError = null;
+        if (File.Exists(destination))
+        {
+            try { return ReadVerified(destination, hash, false, ct); }
+            catch (Exception ex) when (ex is IOException or InvalidDataException) { cacheError = ex; }
+        }
         string? source = reference.AssetPath;
         if (string.IsNullOrWhiteSpace(source) || !Path.IsPathFullyQualified(source) || source.StartsWith("\\\\", StringComparison.Ordinal) ||
             source.StartsWith("//", StringComparison.Ordinal) || !string.Equals(Path.GetExtension(source), ".ply", StringComparison.OrdinalIgnoreCase))
             throw new IOException("找不到此 GS 的本地 PLY 引用；请恢复原缓存，或用 GSRhinoPanel 重新导入原始文件。包围盒仍保留。");
-        if (!File.Exists(source)) throw new FileNotFoundException("GS 引用的 PLY 缓存不存在；请恢复原缓存，或用 GSRhinoPanel 重新导入。包围盒仍保留。");
+        if (!File.Exists(source))
+        {
+            if (cacheError is not null) throw new IOException("GS 缓存损坏，原引用也不可用；坏缓存已保留，请重新导入原始文件。", cacheError);
+            throw new FileNotFoundException("GS 引用的 PLY 缓存不存在；请恢复原缓存，或用 GSRhinoPanel 重新导入。包围盒仍保留。");
+        }
         Directory.CreateDirectory(cacheDirectory);
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(cacheDirectory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         string temporary = Path.Combine(cacheDirectory, Guid.NewGuid().ToString("N") + ".tmp");
@@ -36,13 +45,12 @@ public static class GaussianReferenceAsset
             }
             // Validate the snapshot, not a mutable source file. No unvalidated or partial cache is published.
             GaussianReferenceData data = ReadVerified(temporary, hash, true, ct);
-            ct.ThrowIfCancellationRequested();
-            try { File.Move(temporary, destination); }
-            catch (IOException) when (File.Exists(destination))
-            {
-                if (Digest(destination, ct) != hash) throw new IOException("GS 本地缓存与文档记录的哈希不一致；原始资产未修改。");
-            }
-            return data with { Path = destination };
+            bool published = GaussianCachePublisher.Publish(temporary, destination, hash, ct);
+            return data with { Path = destination, CopiedToCache = published };
+        }
+        catch (Exception ex) when (cacheError is not null && (ex is IOException or InvalidDataException))
+        {
+            throw new IOException("GS 缓存损坏且未能从原引用恢复；坏缓存和源文件均保留，请重新导入原始文件。", ex);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
@@ -57,7 +65,8 @@ public static class GaussianReferenceAsset
 
     private static string Digest(string path, CancellationToken ct)
     {
-        using var input = File.OpenRead(path);
+        // Permit atomic cache replacement while a reader finishes hashing the previous file.
+        using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         var buffer = new byte[131072]; int count;
         while ((count = input.Read(buffer)) > 0) { ct.ThrowIfCancellationRequested(); hash.AppendData(buffer, 0, count); }
