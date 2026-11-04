@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using GSRhino.Core;
 using System.Runtime.InteropServices;
 using Eto.Drawing;
 using Eto.Forms;
@@ -28,6 +29,11 @@ public sealed class GSRhinoPanel : Panel, IPanel
     private readonly Button _export = new() { Text = "导出 USD / USDZ…" };
     private readonly Button _mode = new() { Text = "启用 / 重新加载 GS 显示" };
     private readonly Button _diagnostics = new() { Text = "诊断信息" };
+    private readonly Label _usdStatus = Info("USD / USDZ · 尚未检查运行时");
+    private readonly Button _checkUsd = new() { Text = "检查 USD 运行时" };
+    private readonly Button _usdHelp = new() { Text = "USD 安装指引" };
+    private readonly Button _copyUsdCommand = new() { Text = "复制安装命令" };
+    private CancellationTokenSource? _runtimeCheck;
     private readonly UITimer _timer = new() { Interval = 1 };
     private readonly Stopwatch _clock = new();
     private CancellationTokenSource? _operation;
@@ -36,6 +42,15 @@ public sealed class GSRhinoPanel : Panel, IPanel
     public GSRhinoPanel(uint documentSerialNumber)
     {
         _serial = documentSerialNumber;
+        _checkUsd.Click += (_, _) => _ = CheckUsdAsync();
+        _usdHelp.Click += (_, _) => RunLocal(ShowUsdSetup);
+        _copyUsdCommand.Click += (_, _) => RunLocal(() =>
+        {
+            string command = UsdRuntime.SetupCommand(UsdRuntime.SetupScript, OperatingSystem.IsWindows());
+            Clipboard.Instance.Text = command;
+            ShowUsdSetup();
+            _usdStatus.Text = "安装命令已复制 · 在终端执行后点击检查";
+        });
         _choose.Click += (_, _) => RunLocal(ChooseFile);
         _import.Click += (_, _) => _ = ImportAsync();
         _export.Click += (_, _) => _ = ExportAsync();
@@ -62,7 +77,8 @@ public sealed class GSRhinoPanel : Panel, IPanel
                 _mode, _diagnostics,
                 Info("完整数据保留，不设固定数量上限。读取、投影和排序在后台执行；准备期间显示包围盒。"),
                 Info("3dm 保存 GS 引用，本地缓存需一并保留或随文件传递。透明模型交错、布局和打印暂不支持。"),
-                Info("离线遮挡小样：GSRhinoProbe。USD 导入 / 导出需要本机可用的 OpenUSD Python 环境。"),
+                Info("离线遮挡小样：GSRhinoProbe。USD 导入 / 导出需要本地可选运行时。"),
+                _usdStatus, _checkUsd, Row(_usdHelp, _copyUsdCommand),
                 Info("GSRhino " + GSRhinoPlugin.DisplayVersion + " · CuriousArc · qrost")
             }
         };
@@ -121,7 +137,7 @@ public sealed class GSRhinoPanel : Panel, IPanel
             SetBusy(true); _clock.Restart(); _timer.Start(); _feedback.Text = ""; UpdateDocument();
             var progress = new Progress<string>(value => GSRhinoHost.Ui(() => { if (!_disposed && ReferenceEquals(_operation, cancellation)) _status.Text = value; }));
             string result = await GaussianDocument.ImportAsync(_path.Text, target, scale, axis, sourceUnits, cancellation.Token, progress).ConfigureAwait(false);
-            await GSRhinoHost.OnUi(() => { if (!_disposed) { _status.Text = "导入完成"; _feedback.Text = result; } return true; }).ConfigureAwait(false);
+            await GSRhinoHost.OnUi(() => { if (!_disposed) { _status.Text = "已写入文档 · 显示准备状态见视窗"; _feedback.Text = result; } return true; }).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -176,18 +192,66 @@ public sealed class GSRhinoPanel : Panel, IPanel
             }).ConfigureAwait(false);
         }
     }
+    private void ShowUsdSetup()
+    {
+        string command = UsdRuntime.SetupCommand(UsdRuntime.SetupScript, OperatingSystem.IsWindows());
+        string terminal = OperatingSystem.IsWindows() ? "PowerShell" : "Terminal";
+        _feedback.Text = "USD / USDZ 首次设置 / First-time setup\n" +
+            "1. 安装 Python 3.12；已有 3.11–3.14 时可替换命令中的版本。\n" +
+            "   Install Python 3.12, or use an existing Python 3.11–3.14.\n" +
+            $"2. 在 {terminal} 执行 / Run in {terminal}:\n{command}\n" +
+            "3. 完成后点击“检查 USD 运行时” / Click Check USD runtime when finished.\n" +
+            "首次设置下载 usd-core 26.11 到独立环境；之后导入导出在本地完成。\n" +
+            "Setup downloads usd-core 26.11 into a private environment. Import/export is then local.\n" +
+            "PLY / SPLAT / SPZ 可直接使用 / PLY, SPLAT and SPZ work without this setup.";
+    }
+    private async Task CheckUsdAsync()
+    {
+        if (_disposed || _operation is not null || _runtimeCheck is not null) return;
+        var cancellation = new CancellationTokenSource(); _runtimeCheck = cancellation;
+        _checkUsd.Enabled = false; _usdStatus.Text = "USD / USDZ · 正在检查…";
+        try
+        {
+            UsdRuntimeStatus result = await UsdRuntime.CheckAsync(ct: cancellation.Token).ConfigureAwait(false);
+            await GSRhinoHost.OnUi(() =>
+            {
+                if (!_disposed) _usdStatus.Text = result.Ready ? "USD / USDZ · OpenUSD 26.11 已就绪" : "USD / USDZ · 尚不可用，请查看安装指引\n" + result.Detail;
+                return true;
+            }).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            await GSRhinoHost.OnUi(() => { if (!_disposed) _usdStatus.Text = "USD / USDZ · 检查已取消，可重新检查"; return true; }).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            await GSRhinoHost.OnUi(() => { if (!_disposed) _usdStatus.Text = "USD 运行时检查未完成：" + GSRhinoHost.FriendlyError(ex); return true; }).ConfigureAwait(false);
+        }
+        finally
+        {
+            await GSRhinoHost.OnUi(() =>
+            {
+                if (ReferenceEquals(_runtimeCheck, cancellation)) _runtimeCheck = null;
+                cancellation.Dispose();
+                if (!_disposed) _checkUsd.Enabled = _operation is null;
+                return true;
+            }).ConfigureAwait(false);
+        }
+    }
     private void SetBusy(bool busy)
     {
         _export.Enabled = _exportScope.Enabled = _choose.Enabled = _mode.Enabled = _diagnostics.Enabled = _axis.Enabled = _units.Enabled = _scale.Enabled = !busy;
         _import.Enabled = !busy && !string.IsNullOrWhiteSpace(_path.Text);
         _cancel.Enabled = busy;
+        _usdHelp.Enabled = _copyUsdCommand.Enabled = !busy;
+        _checkUsd.Enabled = !busy && _runtimeCheck is null;
     }
     public void PanelShown(uint documentSerialNumber, ShowPanelReason reason) { if (!_disposed) UpdateDocument(); }
     public void PanelHidden(uint documentSerialNumber, ShowPanelReason reason) { }
-    public void PanelClosing(uint documentSerialNumber, bool onCloseDocument) { _operation?.Cancel(); }
+    public void PanelClosing(uint documentSerialNumber, bool onCloseDocument) { _operation?.Cancel(); _runtimeCheck?.Cancel(); }
     protected override void Dispose(bool disposing)
     {
-        if (disposing && !_disposed) { _disposed = true; _operation?.Cancel(); _timer.Stop(); _timer.Dispose(); }
+        if (disposing && !_disposed) { _disposed = true; _operation?.Cancel(); _runtimeCheck?.Cancel(); _timer.Stop(); _timer.Dispose(); }
         base.Dispose(disposing);
     }
 }
