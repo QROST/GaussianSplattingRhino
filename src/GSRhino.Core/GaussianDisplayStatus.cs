@@ -43,6 +43,10 @@ public enum GaussianDisplayPhase
 /// <summary>Describes what can actually be displayed; an empty completed frame is never success.</summary>
 public static class GaussianDisplayStatus
 {
+    /// <summary>A usable partial frame does not hide pending or failed visible resources.</summary>
+    public static bool ShouldShowOverlay(GaussianDisplayPhase phase, bool frameAccepted) =>
+        phase != GaussianDisplayPhase.Ready || !frameAccepted;
+
     public static GaussianDisplayPhase Evaluate(GaussianDisplayFacts facts)
     {
         ArgumentNullException.ThrowIfNull(facts);

@@ -45,7 +45,7 @@ internal sealed class GaussianViewport : DisplayConduit
     private string _backend="尚未绘制；后端未检测";
     private int _skippedPreviews;
     private DateTime _lastViewRefresh;
-    private sealed record NativeView(uint Document,Size ViewportSize,Size ClientSize);
+    private sealed record NativeView(uint Document,Size ViewportSize,Size ClientSize,Size WindowSize,GaussianNativeSampling? Sampling);
     private sealed record NativeSizeRetry(Size FrameSize,double Dpi);
     private sealed record ViewCandidate(GaussianNativeRequest Request,DateTime ChangedAt,string Reason);
     private sealed class ViewDiagnostics
@@ -255,11 +255,8 @@ internal sealed class GaussianViewport : DisplayConduit
         RhinoView? view=e.RhinoDoc.Views.GetViewList(ViewTypeFilter.Model).FirstOrDefault(v=>v.MainViewport.Id==e.Viewport.Id);
         if(view is not null&&!IsMode(view.MainViewport))RemoveView(e.Viewport.Id,"display_mode_exit");
     }
-    private static bool Matches(Size actual,Size logical,double dpi)
-    {
-        if(actual==logical)return true;
-        return double.IsFinite(dpi)&&dpi>0&&Math.Abs(actual.Width-Math.Round(logical.Width*dpi))<=1&&Math.Abs(actual.Height-Math.Round(logical.Height*dpi))<=1;
-    }
+    private static bool Matches(Size actual,Size native,double dpi)=>
+        GaussianFramePolicy.MatchesNativeSampling(actual.Width,actual.Height,native.Width,native.Height,dpi);
     private void OnBeginSave(object? sender,global::Rhino.DocumentSaveEventArgs e)
     {
         _saving.TryGetValue(e.DocumentSerialNumber,out int depth);_saving[e.DocumentSerialNumber]=depth+1;
@@ -307,8 +304,14 @@ internal sealed class GaussianViewport : DisplayConduit
                 RemoveView(e.Viewport.Id,"no_ready_placements");
                 return;
             }
-            GaussianCamera camera=Camera(e.Viewport,e.Display.FrameSize.Width,e.Display.FrameSize.Height);
-            string key=PlacementKey(placements);
+            NativeView native=_nativeViews[e.Viewport.Id];
+            // SupportFailure already authenticated FrameSize against real native inventory. Preserve the first grid
+            // across rounded DPI representations; only independent window bounds can start a resized scene identity.
+            GaussianNativeSampling sampling=GaussianFramePolicy.ObserveNativeWindow(native.Sampling,e.Display.FrameSize.Width,e.Display.FrameSize.Height,native.WindowSize.Width,native.WindowSize.Height);
+            _nativeViews[e.Viewport.Id]=native with{Sampling=sampling};
+            GaussianCamera camera=GaussianFramePolicy.NormalizeSampling(Camera(e.Viewport,e.Display.FrameSize.Width,e.Display.FrameSize.Height),sampling);
+            string windowKey=FormattableString.Invariant($"window={sampling.WindowWidth}x{sampling.WindowHeight}|");
+            string key=windowKey+PlacementKey(placements);
             bool sameScene=previous is not null&&previous.Request.Key==key;
             if(sameScene&&GaussianFramePolicy.CanReuse(previous!.Request.Camera,camera))
             {
@@ -317,7 +320,8 @@ internal sealed class GaussianViewport : DisplayConduit
                 if(!previous.DrawAccepted)LogDrawRejected(e.Viewport.Id,previous.Error is not null?"frame_error":previous.Pending is not null?"uploading":"preparing",e.Display.FrameSize);
                 return;
             }
-            string reason=previous is null?"first_frame":!sameScene?"placements_changed":
+            string reason=previous is null?"first_frame":!sameScene?
+                (previous.Request.Key.StartsWith(windowKey,StringComparison.Ordinal)?"placements_changed":"native_window_resized"):
                 GaussianFramePolicy.SameProjection(previous.Request.Camera,camera)?"depth_coverage":"projection_changed";
             if(sameScene&&GaussianFramePolicy.SameProjection(previous!.Request.Camera,camera))
                 camera=GaussianFramePolicy.CoverDepthRange(previous.Request.Camera,camera);
@@ -374,8 +378,8 @@ internal sealed class GaussianViewport : DisplayConduit
         if(!Supported(e))return;
         _views.TryGetValue(e.Viewport.Id,out var state);
         bool candidate=_candidates.ContainsKey(e.Viewport.Id);
-        if(!candidate&&state is not null&&state.DrawAccepted&&state.Error is null&&state.InputCount>0&&state.VisibleCount>0)return;
         GaussianDisplayPhase phase=DisplayPhase(e.RhinoDoc,e.Viewport,state,candidate,true,true);
+        if(!GaussianDisplayStatus.ShouldShowOverlay(phase,state?.DrawAccepted==true))return;
         string progress="GSRhino："+DisplayText(phase,state);
         e.Display.Draw2dText(progress,Color.FromArgb(45,135,175),new Point2d(18,38),false,14);
     }
@@ -473,10 +477,11 @@ internal sealed class GaussianViewport : DisplayConduit
             foreach(RhinoView view in doc.Views.GetViewList(ViewTypeFilter.Model))
             {
                 Guid id=view.MainViewport.Id;live.Add(id);
-                // Inventory only: native logical/client sizes may change representation across DPI callbacks.
-                // Neither a size observation nor a polled display-mode mismatch is a frame invalidation or redraw.
-                bool discovered=!_nativeViews.ContainsKey(id);
-                var native=new NativeView(doc.RuntimeSerialNumber,view.MainViewport.Size,view.ClientRectangle.Size);
+                // Inventory only: native viewport/client sizes may change representation across DPI callbacks.
+                // Window bounds are observed independently outside rendering; preserve the accepted grid until a real
+                // window resize. Never invalidate or redraw solely because polling observed another size representation.
+                bool discovered=!_nativeViews.TryGetValue(id,out var previous);
+                var native=new NativeView(doc.RuntimeSerialNumber,view.MainViewport.Size,view.ClientRectangle.Size,view.Bounds.Size,previous?.Sampling);
                 _nativeViews[id]=native;
                 bool retry=_nativeSizeRetries.TryGetValue(id,out var rejected)&&
                     (Matches(rejected.FrameSize,native.ViewportSize,rejected.Dpi)||Matches(rejected.FrameSize,native.ClientSize,rejected.Dpi));

@@ -96,6 +96,34 @@ public sealed class GaussianDisplayStatusTests
         { DocumentInstances = 3, VisibleInstances = 2, ReadyPlacements = 1, LoadingResources = loading, ResourceErrors = errors }));
     }
 
+    [Theory]
+    [InlineData(1, 0)] [InlineData(0, 1)] [InlineData(1, 1)]
+    public void AcceptedPartialFrameKeepsVisibleResourceProgressOrFailureOnScreen(int loading, int errors)
+    {
+        var facts = Complete() with
+        { DocumentInstances = 3, VisibleInstances = 3, ReadyPlacements = 1, LoadedResources = 1, LoadingResources = loading, ResourceErrors = errors };
+        GaussianDisplayPhase phase = GaussianDisplayStatus.Evaluate(facts);
+        Assert.Equal(GaussianDisplayPhase.PartiallyReady, phase);
+        Assert.True(GaussianDisplayStatus.ShouldShowOverlay(phase, frameAccepted: true));
+        GaussianDisplayPhase finished = GaussianDisplayStatus.Evaluate(facts with
+        { ReadyPlacements = 3, LoadedResources = 3, LoadingResources = 0, ResourceErrors = 0 });
+        Assert.False(GaussianDisplayStatus.ShouldShowOverlay(finished, frameAccepted: true));
+    }
+
+    [Fact]
+    public void OnlyCurrentFullyReadyVisibleSceneCanHideOverlay()
+    {
+        foreach (GaussianDisplayPhase phase in Enum.GetValues<GaussianDisplayPhase>())
+        {
+            Assert.True(GaussianDisplayStatus.ShouldShowOverlay(phase, frameAccepted: false));
+            Assert.Equal(phase != GaussianDisplayPhase.Ready, GaussianDisplayStatus.ShouldShowOverlay(phase, frameAccepted: true));
+        }
+        var shared = Complete() with { DocumentInstances = 8, VisibleInstances = 8, ReadyPlacements = 8, LoadedResources = 1 };
+        Assert.False(GaussianDisplayStatus.ShouldShowOverlay(GaussianDisplayStatus.Evaluate(shared), frameAccepted: true));
+        var hiddenError = Complete() with { DocumentInstances = 2, ResourceErrors = 1 };
+        Assert.False(GaussianDisplayStatus.ShouldShowOverlay(GaussianDisplayStatus.Evaluate(hiddenError), frameAccepted: true));
+    }
+
     [Fact]
     public void HiddenResourceErrorsDoNotPreventReadyVisibleInstances()
     {
