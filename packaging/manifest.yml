@@ -1,5 +1,5 @@
 name: gsrhino
-version: 0.1.0-beta.4
+version: 0.1.0-beta.5
 authors:
   - CuriousArc
   - qrost
@@ -7,9 +7,10 @@ description: >-
   GSRhino by CuriousArc and qrost. Import local Gaussian PLY, SPLAT, SPZ
   and official Gaussian USD/USDZ scenes into an experimental native Rhino
   viewport. Full splat data, anisotropic display and SH0-3. Rhino 8.32+.
-  USD import/export requires the optional private OpenUSD runtime. Local preview;
+  USD import/export requires the optional private OpenUSD runtime. English by
+  default with automatic Chinese UI selection. macOS preview;
   native acceptance of this independent package is pending.
-url: https://github.com/QROST
+url: https://github.com/QROST/GaussianSplattingRhino
 keywords:
   - A4A66804-8222-4C0A-B126-CFA51A914863
   - gaussian-splatting

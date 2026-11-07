@@ -2,7 +2,7 @@
 
 **独立的 Rhino 8 本地 Gaussian Splat 查看插件。** 作者：**CuriousArc · qrost**。
 
-[English](readme.md) · 版本 **0.1.0-beta.4** · 本地预览候选版
+[English](readme.md) · 版本 **0.1.0-beta.5** · macOS 预览版
 
 导入高斯场景，在 Rhino 原生建模视窗中显示各向异性高斯、透明度及随视角变化的 SH 颜色。完整保留受支持的高斯数据，不转为点云、不静默抽样，也不需要账号或 API Key。
 
@@ -20,8 +20,8 @@
 ## 安装
 
 - Rhino **8.32 或更高版本**，使用现代 .NET 运行时。提供 macOS 与 Windows 构建目标。
-- 本独立插件仍需原生宿主验收；生成 Windows 安装包不代表已在 Windows Rhino 中实测。
-- 用 Rhino 的 Yak 工具安装对应平台的本地 `.yak` 包，再手动重启 Rhino。不要只复制 RHP，它还依赖相邻的库和资源。
+- 本次分发 macOS 预览版。原生宿主验收（包括 Intel Mac 与 Windows 执行验证）仍待完成；生成 Windows 安装包不代表已在 Windows Rhino 中实测。
+- 用 Rhino 的 Yak 工具安装对应平台的 `.yak` 预览包，再手动重启 Rhino。不要只复制 RHP，它还依赖相邻的库和资源。
 
 源码目录中安装 .NET SDK 8 后可执行：
 

@@ -1,6 +1,14 @@
 # Validation
 
-Candidate: **0.1.0-beta.4**. Maintainer: **CuriousArc · qrost**. Date: 2026-11-04.
+Candidate: **0.1.0-beta.5** (macOS preview). Maintainer: **CuriousArc · qrost**. Date: 2026-11-06.
+
+## Beta.5 language and release preparation
+
+- Fresh complete Release solution build on Apple Silicon macOS: **zero warnings/errors; 296 .NET tests passed**, zero failures/skips. The compiled informational version is `0.1.0-beta.5`.
+- The 13 language checks are included in the full suite. They verify Rhino language precedence, English fallback, Simplified Chinese selection for Chinese locales, background messages, unchanged numeric/UI culture and user content, and all embedded translation format arguments. The Chinese JSON is embedded directly in the Core assembly, so no culture-specific satellite directory is needed in the Yak archive.
+- Current tracked source/documentation identity checks pass. Project attribution is CuriousArc and qrost; no developer home paths or excluded branding are included. Required third-party notices remain intact.
+- Prior actual OpenUSD integration and native-data exchange evidence below is retained: the bridge and rendering algorithms have not changed in this release. The full current .NET suite rechecks import/export protocol and cancellation behavior.
+- Only a macOS Yak preview is prepared for distribution. Exact archive bytes, SHA-256, source commit and package checks are recorded in `artifacts/latest-package-mac.json`; source push, installation and publication are separate operations. Windows and Intel Mac execution and native bilingual layout/rendering acceptance remain pending.
 
 ## Beta.4 prerelease repairs
 
@@ -59,6 +67,6 @@ Run `fixtures/usd-verify.py` with the private USD runtime's Python executable to
 
 Manual acceptance of this independent package remains pending. Windows and Intel Mac execution, the complete depth/alpha matrix, save/reopen/Undo lifecycle and measured sustained frame rate require the checks in [host acceptance](host-acceptance.md). A Windows-tagged managed package is not proof of Windows Rhino execution.
 
-Local CLI installation, when performed, is recorded separately in `artifacts/latest-install.json` with installed-byte verification. It does not establish that Rhino loaded the new plugin or rendered it successfully. No desktop UI automation or remote publication was performed.
+Local CLI installation, when performed, is recorded separately in `artifacts/latest-install.json` with installed-byte verification. It does not establish that Rhino loaded the new plugin or rendered it successfully. Automated validation does not use desktop UI automation or establish remote publication; installation and publication results are recorded separately.
 
 Yak emits a content-name warning because assembly `GSRhino.Rhino` and package slug `gsrhino` differ. Both identities are intentional; platform, Rhino target, plugin GUID and payload verification still pass.

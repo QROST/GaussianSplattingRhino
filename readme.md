@@ -2,7 +2,7 @@
 
 **An independent local Gaussian splat viewer for Rhino 8.** By **CuriousArc · qrost**.
 
-[简体中文](readme.zh-CN.md) · Version **0.1.0-beta.4** · Local preview candidate
+[简体中文](readme.zh-CN.md) · Version **0.1.0-beta.5** · macOS preview
 
 Import Gaussian scenes and view their anisotropic splats, opacity and view-dependent SH color inside Rhino's modeling viewport. GSRhino keeps full supported Gaussian data; it does not replace splats with point clouds or silently reduce their count. No account or API key is needed.
 
@@ -20,8 +20,8 @@ See [format details and sources](docs/formats.md). No product-level splat-count 
 ## Requirements and installation
 
 - Rhino **8.32 or later**, using its modern .NET runtime. Managed builds target macOS and Windows.
-- The new standalone package still needs native host acceptance. Building a Windows package does not establish that it has been tested in Windows Rhino.
-- Install the matching local `.yak` candidate with Rhino's Yak tool, then restart Rhino manually. Do not load the RHP by copying it alone; it needs its adjacent libraries and assets.
+- This release distributes a macOS preview. Native host acceptance, including Intel Mac and Windows execution, remains pending. Building a Windows package does not establish that it has been tested in Windows Rhino.
+- Install the matching `.yak` preview with Rhino's Yak tool, then restart Rhino manually. Do not load the RHP by copying it alone; it needs its adjacent libraries and assets.
 
 From a source checkout with .NET SDK 8 installed:
 
