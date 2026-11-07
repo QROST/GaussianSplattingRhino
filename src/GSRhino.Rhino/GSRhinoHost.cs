@@ -1,3 +1,4 @@
+using UiText = global::GSRhino.Core.UiText;
 using Eto.Forms;
 using RhinoDoc = global::Rhino.RhinoDoc;
 namespace GSRhino.Rhino;
@@ -17,21 +18,21 @@ internal static class GSRhinoHost
         return result.Task;
     }
     internal static string FriendlyError(Exception e) => e is OutOfMemoryException
-        ? "内存不足，操作未完成；原始文件保留，可释放内存后重试。"
-        : e is OperationCanceledException ? "本地操作已取消；原始文件保留。" : e.Message;
+        ? UiText.Get("Out of memory. Operation not completed; original files retained. Free memory and try again.")
+        : e is OperationCanceledException ? UiText.Get("Local operation cancelled; original files retained.") : GSRhino.Core.UiText.Get(e.Message);
     internal static ImportTarget CaptureTarget(RhinoDoc doc)
     {
-        if (global::Rhino.RhinoApp.InvokeRequired) throw new InvalidOperationException("请从 Rhino 界面发起此操作。");
+        if (global::Rhino.RhinoApp.InvokeRequired) throw new InvalidOperationException(UiText.Get("Start this operation from the Rhino interface."));
         RequireTarget(doc.RuntimeSerialNumber);
         return new(doc.RuntimeSerialNumber, doc.ModelUnitSystem);
     }
     internal static RhinoDoc RequireTarget(uint serial)
     {
-        RhinoDoc doc = RhinoDoc.FromRuntimeSerialNumber(serial) ?? throw new InvalidOperationException("目标文档已关闭。");
+        RhinoDoc doc = RhinoDoc.FromRuntimeSerialNumber(serial) ?? throw new InvalidOperationException(UiText.Get("The target document is closed."));
         if (RhinoDoc.ActiveDoc?.RuntimeSerialNumber != serial || doc.IsClosing || doc.IsReadOnly)
-            throw new InvalidOperationException("请先激活可写的目标 Rhino 文档。");
+            throw new InvalidOperationException(UiText.Get("Activate a writable target Rhino document first."));
         if (doc.Views.ActiveView is null || doc.Views.ActiveView is global::Rhino.Display.RhinoPageView)
-            throw new InvalidOperationException("请切换到原生模型视窗；当前版本不在布局细节中显示 GS。");
+            throw new InvalidOperationException(UiText.Get("Switch to a native modeling viewport. GS display in layout details is not supported in this version."));
         return doc;
     }
 }

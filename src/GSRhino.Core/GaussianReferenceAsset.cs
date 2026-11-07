@@ -23,11 +23,11 @@ public static class GaussianReferenceAsset
         string? source = reference.AssetPath;
         if (string.IsNullOrWhiteSpace(source) || !Path.IsPathFullyQualified(source) || source.StartsWith("\\\\", StringComparison.Ordinal) ||
             source.StartsWith("//", StringComparison.Ordinal) || !string.Equals(Path.GetExtension(source), ".ply", StringComparison.OrdinalIgnoreCase))
-            throw new IOException("找不到此 GS 的本地 PLY 引用；请恢复原缓存，或用 GSRhinoPanel 重新导入原始文件。包围盒仍保留。");
+            throw new IOException(UiText.Get("Local PLY reference not found. Restore the cache or re-import the original file using GSRhinoPanel. Bounding box retained."));
         if (!File.Exists(source))
         {
-            if (cacheError is not null) throw new IOException("GS 缓存损坏，原引用也不可用；坏缓存已保留，请重新导入原始文件。", cacheError);
-            throw new FileNotFoundException("GS 引用的 PLY 缓存不存在；请恢复原缓存，或用 GSRhinoPanel 重新导入。包围盒仍保留。");
+            if (cacheError is not null) throw new IOException(UiText.Get("GS cache is corrupt and the original reference is unavailable. Corrupt cache retained; re-import the original file."), cacheError);
+            throw new FileNotFoundException(UiText.Get("Referenced GS PLY cache is missing. Restore the cache or re-import with GSRhinoPanel. Bounding box retained."));
         }
         Directory.CreateDirectory(cacheDirectory);
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(cacheDirectory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
@@ -50,16 +50,16 @@ public static class GaussianReferenceAsset
         }
         catch (Exception ex) when (cacheError is not null && (ex is IOException or InvalidDataException))
         {
-            throw new IOException("GS 缓存损坏且未能从原引用恢复；坏缓存和源文件均保留，请重新导入原始文件。", ex);
+            throw new IOException(UiText.Get("Could not recover the corrupt GS cache from its original reference. Cache and source retained; re-import the original file."), ex);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
     private static GaussianReferenceData ReadVerified(string path, string hash, bool copied, CancellationToken ct)
     {
-        if (Digest(path, ct) != hash) throw new IOException("GS 资源内容与文档记录的哈希不一致；保留包围盒，请恢复原缓存或重新导入。");
+        if (Digest(path, ct) != hash) throw new IOException(UiText.Get("GS resource hash does not match the document. Bounding box retained; restore the cache or re-import."));
         GaussianSplat[] splats = PlyReader.ReadGaussians(path, ct).ToArray();
-        if (splats.Length == 0) throw new InvalidDataException("GS 引用的 PLY 没有完整高斯数据。");
+        if (splats.Length == 0) throw new InvalidDataException(UiText.Get("Referenced GS PLY contains no complete Gaussian data."));
         return new(path, splats, copied);
     }
 

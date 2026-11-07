@@ -1,3 +1,4 @@
+using UiText = global::GSRhino.Core.UiText;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Rhino.Commands;
@@ -11,9 +12,13 @@ public sealed class GSRhinoPlugin : PlugIn
     internal static string DisplayVersion => typeof(GSRhinoPlugin).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.1.0-beta.1";
     protected override LoadReturnCode OnLoad(ref string errorMessage)
     {
+        int? language = null;
+        try { language = Convert.ToInt32(global::Rhino.UI.Localization.CurrentLanguageId); }
+        catch (Exception) { /* A missing host locale falls back to the process UI language. */ }
+        GSRhino.Core.UiText.Initialize(language, System.Globalization.CultureInfo.CurrentUICulture.Name);
         global::Rhino.UI.Panels.RegisterPanel(this, typeof(GSRhinoPanel), "GSRhino", null!, global::Rhino.UI.PanelType.PerDoc);
         GaussianViewport.Initialize(this);
-        global::Rhino.RhinoApp.WriteLine($"GSRhino {DisplayVersion} · CuriousArc · qrost。输入 GSRhinoPanel 打开本地 Gaussian Splat 面板。");
+        global::Rhino.RhinoApp.WriteLine(UiText.Format("GSRhino {0} · CuriousArc · qrost. Run GSRhinoPanel to open the local Gaussian Splat panel.", DisplayVersion));
         return LoadReturnCode.Success;
     }
     protected override void OnShutdown()

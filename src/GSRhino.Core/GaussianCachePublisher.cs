@@ -19,7 +19,7 @@ public static class GaussianCachePublisher
         if (expectedHash.Length != 64 || expectedHash.Any(c => !Uri.IsHexDigit(c))) throw new ArgumentException("Invalid cache SHA-256.", nameof(expectedHash));
         expectedHash = expectedHash.ToLowerInvariant();
         string prepared = Path.GetFullPath(preparedPath), destination = Path.GetFullPath(destinationPath);
-        if (Digest(prepared, ct) != expectedHash) throw new IOException("待恢复资源的 SHA-256 不匹配；现有缓存和源文件未修改。");
+        if (Digest(prepared, ct) != expectedHash) throw new IOException(UiText.Get("The recovery resource SHA-256 does not match. Existing cache and source files are unchanged."));
         if (string.Equals(prepared, destination, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) return false;
 
         using FileStream gate = AcquireLock(destination, ct);
@@ -51,7 +51,7 @@ public static class GaussianCachePublisher
             try { return new FileStream(path, options); }
             catch (IOException) when (File.Exists(path))
             {
-                if (elapsed.Elapsed >= LockTimeout) throw new IOException("等待其他 GS 缓存操作超时；现有缓存未修改，请稍后重试。");
+                if (elapsed.Elapsed >= LockTimeout) throw new IOException(UiText.Get("Timed out waiting for another GS cache operation. Existing cache is unchanged; try again later."));
                 if (ct.WaitHandle.WaitOne(50)) ct.ThrowIfCancellationRequested();
             }
         }

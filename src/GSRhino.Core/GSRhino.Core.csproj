@@ -3,4 +3,5 @@
     <TargetFramework>net7.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup><PackageReference Include="ZstdSharp.Port" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="UiText.zh.json" LogicalName="GSRhino.Core.UiText.zh.json" WithCulture="false" /></ItemGroup>
 </Project>

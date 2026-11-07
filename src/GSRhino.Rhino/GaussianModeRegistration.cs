@@ -1,3 +1,4 @@
+using UiText = global::GSRhino.Core.UiText;
 namespace GSRhino.Rhino;
 
 // Plain snapshots keep registration decisions testable without loading the Rhino runtime.
@@ -32,7 +33,7 @@ internal static class GaussianModeRegistration
     internal static Guid Ensure(IGaussianModeStore store, Guid savedId, string englishName)
     {
         ArgumentNullException.ThrowIfNull(store);
-        if (string.IsNullOrWhiteSpace(englishName)) throw new ArgumentException("显示模式名称不能为空。", nameof(englishName));
+        if (string.IsNullOrWhiteSpace(englishName)) throw new ArgumentException(UiText.Get("The display mode name must not be empty."), nameof(englishName));
 
         GaussianDisplayModeSnapshot? mode = savedId == Guid.Empty ? null : store.Get(savedId);
         if (!Matches(mode, savedId, englishName)) mode = null;
@@ -42,11 +43,11 @@ internal static class GaussianModeRegistration
         if (mode is null)
         {
             Guid createdId = store.CopyShaded(englishName);
-            if (createdId == Guid.Empty) throw new InvalidOperationException("无法注册 GSRhino GS 实验显示模式。");
+            if (createdId == Guid.Empty) throw new InvalidOperationException(UiText.Get("Could not register the experimental GSRhino GS display mode."));
             // Persist immediately, before any readback/update can fail: retries must not keep copying Shaded.
             store.SaveId(createdId);
             mode = store.Get(createdId);
-            if (!Matches(mode, createdId, englishName)) throw new InvalidOperationException("无法读取新建的 GSRhino GS 显示模式。");
+            if (!Matches(mode, createdId, englishName)) throw new InvalidOperationException(UiText.Get("Could not read the new GSRhino GS display mode."));
         }
         else store.SaveId(mode.Id);
 
@@ -62,7 +63,7 @@ internal static class GaussianModeRegistration
         _ = store.Update(desired);
         GaussianDisplayModeSnapshot? persisted = store.Get(desired.Id);
         if (!Matches(persisted, desired.Id, englishName) || !HasRequiredSettings(persisted!))
-            throw new InvalidOperationException("GSRhino GS 显示模式设置尚未保存，请稍后重试。");
+            throw new InvalidOperationException(UiText.Get("GSRhino GS display settings have not been saved. Try again later."));
         return desired.Id;
     }
 

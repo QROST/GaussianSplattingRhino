@@ -42,7 +42,7 @@ internal sealed class GaussianViewport : DisplayConduit
     private long _generation;
     private volatile bool _stopping;
     private string? _lastError;
-    private string _backend="尚未绘制；后端未检测";
+    private string _backend=UiText.Get("Not drawn yet; backend not detected");
     private int _skippedPreviews;
     private DateTime _lastViewRefresh;
     private sealed record NativeView(uint Document,Size ViewportSize,Size ClientSize,Size WindowSize,GaussianNativeSampling? Sampling);
@@ -102,7 +102,7 @@ internal sealed class GaussianViewport : DisplayConduit
         if(_startupAttempts>=3)
         {
             CancelStartup();
-            global::Rhino.RhinoApp.WriteLine(_startupError+" GSRhinoPanel 仍可使用；输入 GSRhinoMode 重试。");
+            global::Rhino.RhinoApp.WriteLine(_startupError+UiText.Get(" GSRhinoPanel remains available; run GSRhinoMode to retry."));
         }
         else if(_startupTimer is null)
         {
@@ -115,7 +115,7 @@ internal sealed class GaussianViewport : DisplayConduit
             {
                 CancelStartup();
                 GaussianLog.Write("viewport_startup_retry_unavailable",$"error={ex.GetType().Name}");
-                global::Rhino.RhinoApp.WriteLine(_startupError+" 输入 GSRhinoMode 重试。");
+                global::Rhino.RhinoApp.WriteLine(_startupError+UiText.Get(" Run GSRhinoMode to retry."));
             }
         }
     }
@@ -142,7 +142,7 @@ internal sealed class GaussianViewport : DisplayConduit
             var conduit=new GaussianViewport();_instance=conduit;
             string texture=Path.Combine(Path.GetDirectoryName(typeof(GaussianViewport).Assembly.Location)!,"assets","gaussian-opacity-atlas.png");
             if(File.Exists(texture))conduit._material=CreateMaterial(texture);
-            else conduit._lastError="缺少 Gaussian opacity atlas；保留可见包围盒。";
+            else conduit._lastError=UiText.Get("Gaussian opacity atlas is missing; visible bounding boxes retained.");
             stage="document_and_viewport";
             GaussianDocument.Initialize();conduit.RefreshNativeViews();
             conduit._timer=new Eto.Forms.UITimer{Interval=.016};conduit._timer.Elapsed+=conduit.OnIdle;conduit._timer.Start();
@@ -155,8 +155,8 @@ internal sealed class GaussianViewport : DisplayConduit
         catch(Exception ex)
         {
             // Keep core commands/panel available, and release partial native state before a bounded or explicit retry.
-            string action=stage switch { "mode_registration"=>"显示模式注册", "material"=>"材质准备", _=>"视口初始化" };
-            _startupError="GSRhino GS 初始化未完成："+action+"。";
+            string action=stage switch { "mode_registration"=>UiText.Get("Display mode registration"), "material"=>UiText.Get("Material preparation"), _=>UiText.Get("Viewport initialization") };
+            _startupError=UiText.Get("GSRhino GS initialization not completed: ")+action+".";
             GaussianLog.Write("viewport_startup_failed",$"version={GSRhinoPlugin.DisplayVersion}; trigger={trigger}; attempt={_startupAttempts}; stage={stage}; error={ex.GetType().Name}");
             try { StopRenderer(); }
             catch(Exception cleanup){GaussianLog.Write("viewport_startup_cleanup_failed",$"error={cleanup.GetType().Name}");}
@@ -220,11 +220,11 @@ internal sealed class GaussianViewport : DisplayConduit
     internal static void Activate(RhinoDoc doc)
     {
         if(!TryInitializeRenderer("command")||_modeId==Guid.Empty)
-            throw new InvalidOperationException((_startupError??"GSRhino GS 显示模式尚未初始化。")+"运行 GSRhinoDiagnostics 查看状态，可稍后再次运行 GSRhinoMode。");
+            throw new InvalidOperationException((_startupError??UiText.Get("GSRhino GS display mode is not initialized."))+UiText.Get("Run GSRhinoDiagnostics for status, then retry GSRhinoMode later."));
         CancelStartup();
-        var view=doc.Views.ActiveView??throw new InvalidOperationException("请先激活一个模型视窗。");
-        if(view is RhinoPageView)throw new InvalidOperationException("请先切换到原生模型视窗；本版不在布局细节中绘制 GS。");
-        using var mode=DisplayModeDescription.GetDisplayMode(_modeId)??throw new InvalidOperationException("GSRhino GS 显示模式已被删除，请重新加载插件。");
+        var view=doc.Views.ActiveView??throw new InvalidOperationException(UiText.Get("Activate a modeling viewport first."));
+        if(view is RhinoPageView)throw new InvalidOperationException(UiText.Get("Switch to a native modeling viewport. GS drawing in layout details is not supported in this version."));
+        using var mode=DisplayModeDescription.GetDisplayMode(_modeId)??throw new InvalidOperationException(UiText.Get("GSRhino GS display mode was deleted. Reload the plugin."));
         view.ActiveViewport.DisplayMode=mode;GaussianDocument.Reload(doc);_instance!.RefreshNativeViews();view.Redraw();
     }
     private static bool IsMode(RhinoViewport viewport)=>viewport.DisplayMode?.Id==_modeId;
@@ -280,7 +280,7 @@ internal sealed class GaussianViewport : DisplayConduit
                 if(box.IsValid)e.IncludeBoundingBox(box);
             }
         }
-        catch(Exception ex){_lastError="GS 包围盒计算失败："+GSRhinoHost.FriendlyError(ex);}
+        catch(Exception ex){_lastError=UiText.Get("GS bounding box calculation failed: ")+GSRhinoHost.FriendlyError(ex);}
     }
     protected override void PreDrawObjects(DrawEventArgs e)
     {
@@ -293,7 +293,7 @@ internal sealed class GaussianViewport : DisplayConduit
             return;
         }
         _nativeSizeRetries.Remove(e.Viewport.Id);
-        _backend=e.Display.IsOpenGL?"OpenGL（当前视窗）":"Non-OpenGL（不能仅据此确认 Metal）";
+        _backend=e.Display.IsOpenGL?UiText.Get("OpenGL (current viewport)"):UiText.Get("Non-OpenGL (this alone does not confirm Metal)");
         try
         {
             var placements=GaussianDocument.Placements(e.RhinoDoc,e.Viewport);
@@ -342,7 +342,7 @@ internal sealed class GaussianViewport : DisplayConduit
             LogDrawRejected(e.Viewport.Id,reason,e.Display.FrameSize);
             _lastError=null;
         }
-        catch(Exception ex){_lastError="GS 准备失败，保留包围盒："+GSRhinoHost.FriendlyError(ex);RemoveView(e.Viewport.Id,"observation_failed");}
+        catch(Exception ex){_lastError=UiText.Get("GS preparation failed; bounding boxes retained: ")+GSRhinoHost.FriendlyError(ex);RemoveView(e.Viewport.Id,"observation_failed");}
     }
     protected override void PreDrawObject(DrawObjectEventArgs e)
     {
@@ -366,7 +366,7 @@ internal sealed class GaussianViewport : DisplayConduit
             }
             e.Display.Flush();
         }
-        catch(Exception ex){state.Error="GS 批量绘制失败；保留包围盒，运行 GSRhinoMode 重试："+GSRhinoHost.FriendlyError(ex);_lastError=state.Error;GaussianLog.Write("draw_failed",$"generation={state.Request.Generation}; {state.Error}");}
+        catch(Exception ex){state.Error=UiText.Get("GS batch drawing failed; bounding boxes retained. Run GSRhinoMode to retry: ")+GSRhinoHost.FriendlyError(ex);_lastError=state.Error;GaussianLog.Write("draw_failed",$"generation={state.Request.Generation}; {state.Error}");}
         finally
         {
             try{if(writing)e.Display.PopDepthWriting();}finally{if(testing)e.Display.PopDepthTesting();}
@@ -380,7 +380,7 @@ internal sealed class GaussianViewport : DisplayConduit
         bool candidate=_candidates.ContainsKey(e.Viewport.Id);
         GaussianDisplayPhase phase=DisplayPhase(e.RhinoDoc,e.Viewport,state,candidate,true,true);
         if(!GaussianDisplayStatus.ShouldShowOverlay(phase,state?.DrawAccepted==true))return;
-        string progress="GSRhino："+DisplayText(phase,state);
+        string progress="GSRhino: "+DisplayText(phase,state);
         e.Display.Draw2dText(progress,Color.FromArgb(45,135,175),new Point2d(18,38),false,14);
     }
     private void AcceptStableCandidates()
@@ -428,13 +428,13 @@ internal sealed class GaussianViewport : DisplayConduit
                     {
                         mesh=new Mesh();mesh.Vertices.UseDoublePrecisionVertices=true;
                         mesh.Vertices.AddVertices(batch.Vertices);mesh.Faces.AddFaces(batch.Faces);
-                        if(!mesh.Normals.SetNormals(batch.Normals)||!mesh.TextureCoordinates.SetTextureCoordinates(batch.Uv)||!mesh.VertexColors.SetColors(batch.Colors))throw new InvalidOperationException("Rhino 未能接受 GS 法线、UV 或顶点色。");
+                        if(!mesh.Normals.SetNormals(batch.Normals)||!mesh.TextureCoordinates.SetTextureCoordinates(batch.Uv)||!mesh.VertexColors.SetColors(batch.Colors))throw new InvalidOperationException(UiText.Get("Rhino could not accept GS normals, UVs or vertex colors."));
                         mesh.SetSurfaceParametersFromTextureCoordinates();
                         state.Batches.Add(new NativeBatch(mesh,batch.FaceIndices));mesh=null;state.Pending.Batches[index]=null;
                         state.MaxUploadMilliseconds=Math.Max(state.MaxUploadMilliseconds,upload.Elapsed.TotalMilliseconds);
                         if(state.Batches.Count%16==0)GaussianLog.Write("upload_progress",$"generation={state.Request.Generation}; batches={state.Batches.Count}/{state.TotalBatches}");
                     }
-                    catch(Exception ex){mesh?.Dispose();state.Error="GS 上传失败，保留包围盒："+GSRhinoHost.FriendlyError(ex);_lastError=state.Error;Retire(state);break;}
+                    catch(Exception ex){mesh?.Dispose();state.Error=UiText.Get("GS upload failed; bounding boxes retained: ")+GSRhinoHost.FriendlyError(ex);_lastError=state.Error;Retire(state);break;}
                 }
                 if(state.Pending is not null&&state.Batches.Count==state.TotalBatches)
                 {state.Pending=null;state.Complete=true;GaussianLog.Write("frame_ready",$"generation={state.Request.Generation}; visible={state.VisibleCount}; batches={state.Batches.Count}; maxUploadMs={state.MaxUploadMilliseconds:F1}");Redraw(state.Request);}
@@ -449,7 +449,7 @@ internal sealed class GaussianViewport : DisplayConduit
                 if(next is not null)Start(next);
             }
         }
-        catch(Exception ex){_lastError="GS 调度未完成："+GSRhinoHost.FriendlyError(ex);}
+        catch(Exception ex){_lastError=UiText.Get("GS scheduling not completed: ")+GSRhinoHost.FriendlyError(ex);}
         finally{_pumping=false;}
     }
     private void Start(ViewState state)
@@ -463,7 +463,7 @@ internal sealed class GaussianViewport : DisplayConduit
             WorkResult result;
             try{var prepared=GaussianNativeBatchBuilder.Prepare(work.Request,token);result=new(work.Request,prepared,null,false);}
             catch(OperationCanceledException)when(token.IsCancellationRequested){result=new(work.Request,null,null,true);GaussianLog.Write("prepare_cancelled",$"generation={work.Request.Generation}");}
-            catch(Exception ex){result=new(work.Request,null,"GS 后台准备失败，保留包围盒："+GSRhinoHost.FriendlyError(ex),false);}
+            catch(Exception ex){result=new(work.Request,null,UiText.Get("GS background preparation failed; bounding boxes retained: ")+GSRhinoHost.FriendlyError(ex),false);}
             finally{cancellation.Dispose();}
             if(!_stopping)_results.Enqueue(result);
         });
@@ -557,13 +557,13 @@ internal sealed class GaussianViewport : DisplayConduit
         using var source=new Material{DiffuseColor=Color.White,DisableLighting=true,AlphaTransparency=true,Transparency=0,SpecularColor=Color.Black,Reflectivity=0,Shine=0};
         using var texture=new Texture{FileName=path,Enabled=true,TreatAsLinear=true,TextureCombineMode=TextureCombineMode.Blend,WrapU=TextureUvwWrapping.Clamp,WrapV=TextureUvwWrapping.Clamp,MinFilter=TextureFilter.Linear,MagFilter=TextureFilter.Linear};
         texture.SetRGBBlendValues(Color.Black,1,0,0,0);texture.SetAlphaBlendValues(0,0,1,0,0);
-        if(!source.SetBitmapTexture(texture))throw new InvalidOperationException("无法设置 Gaussian opacity atlas。");
+        if(!source.SetBitmapTexture(texture))throw new InvalidOperationException(UiText.Get("Could not set the Gaussian opacity atlas."));
         return new DisplayMaterial(source){IsTwoSided=false};
     }
     private static GaussianVector Vector(Vector3d v)=>new(v.X,v.Y,v.Z);
     private static GaussianCamera Camera(RhinoViewport viewport,int width,int height)
     {
-        if(width<=0||height<=0||!viewport.GetFrustum(out double left,out double right,out double bottom,out double top,out double near,out double far))throw new InvalidOperationException("无法读取视窗尺寸或相机视锥。");
+        if(width<=0||height<=0||!viewport.GetFrustum(out double left,out double right,out double bottom,out double top,out double near,out double far))throw new InvalidOperationException(UiText.Get("Could not read viewport size or camera frustum."));
         var eye=viewport.CameraLocation;double factor=viewport.IsPerspectiveProjection?near:1;
         return new(new(eye.X,eye.Y,eye.Z),Vector(viewport.CameraX),Vector(viewport.CameraY),Vector(viewport.CameraDirection).Normalized(),viewport.IsPerspectiveProjection,width,height,
             factor*width/(right-left),factor*height/(top-bottom),-left*width/(right-left)-.5,top*height/(top-bottom)-.5,near,far);
@@ -593,30 +593,30 @@ internal sealed class GaussianViewport : DisplayConduit
     }
     private static string DisplayText(GaussianDisplayPhase phase,ViewState? frame)=>phase switch
     {
-        GaussianDisplayPhase.NoRecognizedInstances=>"文档中未识别到 GS 引用；请导入原始 GS 文件。",
-        GaussianDisplayPhase.WaitingForModelView=>"请激活原生模型视图。",
-        GaussianDisplayPhase.NoVisibleInstances=>"当前视图没有可见 GS 对象；检查隐藏状态和图层。",
-        GaussianDisplayPhase.WaitingForResources=>"已识别 GS，等待读取本地资源；保留包围盒。",
-        GaussianDisplayPhase.LoadingResources=>"已识别 GS，资源加载中；保留包围盒。",
-        GaussianDisplayPhase.ResourceLoadFailed=>"GS 资源加载失败；保留包围盒，请查看资源错误或恢复原始文件。",
-        GaussianDisplayPhase.NoRenderablePlacements=>"当前可见 GS 尚不能绘制；检查实例变换或资源状态。",
-        GaussianDisplayPhase.WaitingForGsMode=>"资源已加载；请切换到 GSRhino 显示模式。",
-        GaussianDisplayPhase.WaitingForStableView=>"视角变化，等待稳定后准备显示。",
-        GaussianDisplayPhase.WaitingForFrame=>"资源已加载，等待模型视图准备显示。",
-        GaussianDisplayPhase.Preparing=>"后台投影与排序中；保留包围盒。",
-        GaussianDisplayPhase.Uploading=>$"上传 {frame?.Batches.Count??0:N0}/{frame?.TotalBatches??0:N0} 批；完整就绪后显示。",
-        GaussianDisplayPhase.PreparationFailed=>"显示准备失败；保留包围盒，运行 GSRhinoDiagnostics 查看错误。",
-        GaussianDisplayPhase.NoProjectedGaussians=>"GS 已加载，当前视角投影可见数量为 0；检查视角和裁切范围。",
-        GaussianDisplayPhase.PartiallyReady=>"部分 GS 已就绪；其他可见实例仍待加载或存在错误。",
-        GaussianDisplayPhase.Ready=>"当前视图可见 GS 已就绪。",
-        _=>"显示状态未知。"
+        GaussianDisplayPhase.NoRecognizedInstances=>UiText.Get("No GS references recognized in the document. Import an original GS file."),
+        GaussianDisplayPhase.WaitingForModelView=>UiText.Get("Activate a native modeling viewport."),
+        GaussianDisplayPhase.NoVisibleInstances=>UiText.Get("No visible GS objects in this view. Check visibility and layers."),
+        GaussianDisplayPhase.WaitingForResources=>UiText.Get("GS recognized; waiting for local resources. Bounding boxes retained."),
+        GaussianDisplayPhase.LoadingResources=>UiText.Get("GS recognized; loading resources. Bounding boxes retained."),
+        GaussianDisplayPhase.ResourceLoadFailed=>UiText.Get("GS resource loading failed. Bounding boxes retained; check resource errors or restore the original file."),
+        GaussianDisplayPhase.NoRenderablePlacements=>UiText.Get("Visible GS cannot be rendered yet. Check instance transforms and resources."),
+        GaussianDisplayPhase.WaitingForGsMode=>UiText.Get("Resources loaded. Switch to the GSRhino display mode."),
+        GaussianDisplayPhase.WaitingForStableView=>UiText.Get("View changed; waiting for a stable view before preparation."),
+        GaussianDisplayPhase.WaitingForFrame=>UiText.Get("Resources loaded; waiting for the modeling viewport."),
+        GaussianDisplayPhase.Preparing=>UiText.Get("Projecting and sorting in the background; bounding boxes retained."),
+        GaussianDisplayPhase.Uploading=>UiText.Format("Uploading batches {0:N0}/{1:N0}; display starts when fully ready.", frame?.Batches.Count??0, frame?.TotalBatches??0),
+        GaussianDisplayPhase.PreparationFailed=>UiText.Get("Display preparation failed. Bounding boxes retained; run GSRhinoDiagnostics for errors."),
+        GaussianDisplayPhase.NoProjectedGaussians=>UiText.Get("GS loaded, but no splats project into this view. Check the camera and clipping range."),
+        GaussianDisplayPhase.PartiallyReady=>UiText.Get("Some GS are ready; other visible instances are loading or have errors."),
+        GaussianDisplayPhase.Ready=>UiText.Get("Visible GS in the current view are ready."),
+        _=>UiText.Get("Unknown display status.")
     };
-    private static string StorageDiagnostics => "GS 缓存目录："+Path.Combine(LocalStorage.Root,"assets","gaussians")+"\n原始源文件目录："+Path.Combine(LocalStorage.Root,"sources");
+    private static string StorageDiagnostics => UiText.Get("GS cache directory: ")+Path.Combine(LocalStorage.Root,"assets","gaussians")+UiText.Get("\nOriginal source directory: ")+Path.Combine(LocalStorage.Root,"sources");
     internal static string Diagnostics(RhinoDoc doc)
     {
         var conduit=_instance;
-        if(conduit is null)return $"GSRhino {GSRhinoPlugin.DisplayVersion}；GS 初始化：{(_startupScheduled?"等待自动重试":"尚未就绪")}；自动尝试 {_startupAttempts}/3 次。\n"+
-            (_startupError??"显示模式准备中。")+" GSRhinoPanel 可用；输入 GSRhinoMode 重试。\n"+StorageDiagnostics+"\n日志："+GaussianLog.FilePath;
+        if(conduit is null)return UiText.Format("GSRhino {0}; GS initialization: {1}; automatic attempt {2}/3.\n", GSRhinoPlugin.DisplayVersion, (_startupScheduled?UiText.Get("Waiting for automatic retry"):UiText.Get("Not ready")), _startupAttempts)+
+            (_startupError??UiText.Get("Preparing display mode."))+UiText.Get(" GSRhinoPanel is available; run GSRhinoMode to retry.\n")+StorageDiagnostics+UiText.Get("\nLog: ")+GaussianLog.FilePath;
         var active=doc.Views.ActiveView?.ActiveViewport;ViewState? state=null;
         if(active is not null)conduit?._views.TryGetValue(active.Id,out state);
         ViewDiagnostics? diagnostics=null;
@@ -624,10 +624,10 @@ internal sealed class GaussianViewport : DisplayConduit
         bool candidate=active is not null&&conduit?._candidates.ContainsKey(active.Id)==true;
         bool modelView=active is not null&&doc.Views.ActiveView is not RhinoPageView;
         string status=DisplayText(DisplayPhase(doc,active,state,candidate,modelView,active is not null&&IsMode(active)),state);
-        return "GSRhino GS 批量实验版；"+(conduit?._backend??"未初始化")+"。\n"+GaussianDocument.Diagnostics(doc)+"\n"+
-            $"状态：{status}；输入：{state?.InputCount??0:N0}；投影可见：{state?.VisibleCount??0:N0}；本帧批数：{state?.Batches.Count??0:N0}；每批最多 {GaussianNativeBatchBuilder.SplatsPerBatch} 个 GS（无总数上限）。\n"+
-            $"后台准备 {state?.PreparationMilliseconds??0:F1} ms；最长单批上传 {state?.MaxUploadMilliseconds??0:F1} ms；最近绘制 {state?.LastDrawMilliseconds??0:F1} ms；已跳过缩略图/非原生尺寸绘制 {conduit?._skippedPreviews??0:N0} 次。\n"+
-            $"重启准备 {diagnostics?.Restarts??0:N0} 次；最近原因：{diagnostics?.LastReplacementReason??"none"}；绘制暂缓 {diagnostics?.DrawRejects??0:N0} 次，最近原因：{diagnostics?.LastRejectReason??"none"}。\n"+
-            "原始高斯完整保留；8 位 RGB/HDR 截断与 256 级 opacity atlas 为显示精度限制。透明体交错、Raytraced、布局/打印/捕获/缩略图和大场景实时速度仍待后续支持或验收。顶点 RGB+atlas alpha 及原生遮挡需手动宿主验证。\n"+(state?.Error??conduit?._lastError??"未自动判定视觉通过。")+"\n"+StorageDiagnostics+"\n日志："+GaussianLog.FilePath;
+        return UiText.Get("GSRhino GS experimental batch renderer; ")+(conduit?._backend??UiText.Get("Not initialized"))+".\n"+GaussianDocument.Diagnostics(doc)+"\n"+
+            UiText.Format("Status: {0}; input: {1:N0}; projected visible: {2:N0}; frame batches: {3:N0}; up to {4} GS per batch (no total count limit).\n", status, state?.InputCount??0, state?.VisibleCount??0, state?.Batches.Count??0, GaussianNativeBatchBuilder.SplatsPerBatch)+
+            UiText.Format("Background preparation {0:F1} ms; longest batch upload {1:F1} ms; latest draw {2:F1} ms; skipped thumbnail/non-native-size draws {3:N0}.\n", state?.PreparationMilliseconds??0, state?.MaxUploadMilliseconds??0, state?.LastDrawMilliseconds??0, conduit?._skippedPreviews??0)+
+            UiText.Format("Preparation restarts {0:N0}; latest reason: {1}; deferred draws {2:N0}; latest reason: {3}.\n", diagnostics?.Restarts??0, diagnostics?.LastReplacementReason??"none", diagnostics?.DrawRejects??0, diagnostics?.LastRejectReason??"none")+
+            UiText.Get("Original Gaussians are fully retained. Display precision is limited by 8-bit RGB/HDR clamping and the 256-level opacity atlas. Interleaved transparency, Raytraced, layouts/printing/capture/thumbnails and real-time large scenes need further support or acceptance. Vertex RGB + atlas alpha and native occlusion require manual host verification.\n")+(state?.Error??conduit?._lastError??UiText.Get("Visual acceptance was not determined automatically."))+"\n"+StorageDiagnostics+UiText.Get("\nLog: ")+GaussianLog.FilePath;
     }
 }

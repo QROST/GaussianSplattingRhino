@@ -18,10 +18,10 @@ public sealed class GSRhinoImportCommand : Command
         try
         {
             ImportTarget target=GSRhinoHost.CaptureTarget(doc);
-            using var dialog=new Eto.Forms.OpenFileDialog { Title="导入本地 Gaussian Splat 场景（自动轴向和单位）",MultiSelect=false };
+            using var dialog=new Eto.Forms.OpenFileDialog { Title=UiText.Get("Import local Gaussian Splat scene (automatic axis and units)"),MultiSelect=false };
             GSRhinoPanel.AddFilters(dialog);
             if(dialog.ShowDialog(global::Rhino.UI.RhinoEtoApp.MainWindowForDocument(doc))!=Eto.Forms.DialogResult.Ok)return Result.Cancel;
-            global::Rhino.RhinoApp.WriteLine("正在以自动轴向、自动单位和 1 倍比例导入；自定义设置请使用 GSRhinoPanel。后台准备期间显示包围盒，请保持目标文档单位不变。");
+            global::Rhino.RhinoApp.WriteLine(UiText.Get("Importing with automatic axis/units and scale 1. Use GSRhinoPanel for custom settings. Bounding boxes appear during preparation; keep document units unchanged."));
             _=ImportAsync(dialog.FileName,target); return Result.Success;
         }
         catch(Exception ex){global::Rhino.RhinoApp.WriteLine(GSRhinoHost.FriendlyError(ex));return Result.Failure;}
@@ -34,7 +34,7 @@ public sealed class GSRhinoImportCommand : Command
             string result=await GaussianDocument.ImportAsync(path,target,1,"Auto",true,CancellationToken.None).ConfigureAwait(false);
             GSRhinoHost.Ui(()=>global::Rhino.RhinoApp.WriteLine(result));
         }
-        catch(Exception ex){GSRhinoHost.Ui(()=>global::Rhino.RhinoApp.WriteLine("GS 导入未完成："+GSRhinoHost.FriendlyError(ex)));}
+        catch(Exception ex){GSRhinoHost.Ui(()=>global::Rhino.RhinoApp.WriteLine(UiText.Get("GS import not completed: ")+GSRhinoHost.FriendlyError(ex)));}
     }
 }
 
@@ -47,7 +47,7 @@ public sealed class GSRhinoModeCommand : Command
         try
         {
             GaussianViewport.Activate(doc);
-            global::Rhino.RhinoApp.WriteLine("已启用 GSRhino (Experimental)。使用原生深度遮挡；详细效果需按本机验收。透明物体交错尚未支持，可运行 GSRhinoProbe 创建验收小样。资源缺失时显示包围盒。");
+            global::Rhino.RhinoApp.WriteLine(UiText.Get("GSRhino (Experimental) enabled with native depth testing. Validate the result on this machine. Interleaved transparent objects are not supported. Run GSRhinoProbe for a test sample. Missing resources appear as bounding boxes."));
             return Result.Success;
         }
         catch(Exception ex){global::Rhino.RhinoApp.WriteLine(GSRhinoHost.FriendlyError(ex));return Result.Failure;}
@@ -75,7 +75,7 @@ public sealed class GSRhinoProbeCommand : Command
         try
         {
             ImportTarget target=GSRhinoHost.CaptureTarget(doc);
-            global::Rhino.RhinoApp.WriteLine("正在创建离线 GS 遮挡试验：两组完整高斯、一个不透明 Brep 立方体和一个 Mesh。此命令会添加试验对象，可 Undo 撤销。运行后请旋转相机检查前后遮挡与柔和透明边缘。");
+            global::Rhino.RhinoApp.WriteLine(UiText.Get("Creating an offline GS occlusion test: two complete Gaussian groups, an opaque Brep cube and a Mesh. This adds test objects and supports Undo. Orbit to inspect depth and soft transparent edges."));
             _=CreateAsync(target); return Result.Success;
         }
         catch(Exception ex){global::Rhino.RhinoApp.WriteLine(GSRhinoHost.FriendlyError(ex));return Result.Failure;}
@@ -89,19 +89,19 @@ public sealed class GSRhinoProbeCommand : Command
             string result=await GaussianDocument.ImportAsync(path,target,1,"Z",false,CancellationToken.None).ConfigureAwait(false);
             await GSRhinoHost.OnUi(()=>
             {
-                RhinoDoc doc=RhinoDoc.FromRuntimeSerialNumber(target.Serial)??throw new InvalidOperationException("试验目标文档已关闭。");
+                RhinoDoc doc=RhinoDoc.FromRuntimeSerialNumber(target.Serial)??throw new InvalidOperationException(UiText.Get("The test target document is closed."));
                 if(RhinoDoc.ActiveDoc?.RuntimeSerialNumber!=target.Serial||doc.ModelUnitSystem!=target.Units||doc.IsClosing||doc.IsReadOnly||doc.IsCommandRunning||doc.UndoRecordingIsActive)
-                    throw new InvalidOperationException("目标文档状态改变。已导入 GS；遮挡测试几何未添加。");
-                uint undo=doc.BeginUndoRecord("添加 GS 遮挡测试几何");
-                if(undo==0)throw new InvalidOperationException("无法建立测试几何撤销记录。");
+                    throw new InvalidOperationException(UiText.Get("The target document state changed. GS was imported; occlusion test geometry was not added."));
+                uint undo=doc.BeginUndoRecord(UiText.Get("Add GS occlusion test geometry"));
+                if(undo==0)throw new InvalidOperationException(UiText.Get("Could not create an undo record for test geometry."));
                 try
                 {
                     using Brep cube=new BoundingBox(new Point3d(-.35,-.8,-1.5),new Point3d(.35,.8,1.5)).ToBrep();
                     using var attrs=new ObjectAttributes{LayerIndex=GaussianDocument.VisibleLayer(doc),Name="GSRhino probe · opaque Brep",ObjectColor=Color.FromArgb(65,95,160),ColorSource=ObjectColorSource.ColorFromObject};
-                    if(doc.Objects.AddBrep(cube,attrs)==Guid.Empty) throw new InvalidOperationException("无法添加 Brep 遮挡试验几何。");
+                    if(doc.Objects.AddBrep(cube,attrs)==Guid.Empty) throw new InvalidOperationException(UiText.Get("Could not add Brep occlusion test geometry."));
                     using var mesh=Mesh.CreateFromBox(new BoundingBox(new Point3d(1.2,-1.0,-.25),new Point3d(2.3,1.0,.25)),1,1,1);
                     attrs.Name="GSRhino probe · opaque Mesh";attrs.ObjectColor=Color.FromArgb(170,140,65);
-                    if(doc.Objects.AddMesh(mesh,attrs)==Guid.Empty) throw new InvalidOperationException("无法添加 Mesh 遮挡试验几何。已添加的几何可 Undo 撤销。");
+                    if(doc.Objects.AddMesh(mesh,attrs)==Guid.Empty) throw new InvalidOperationException(UiText.Get("Could not add Mesh occlusion test geometry. Use Undo to remove geometry already added."));
                 }
                 finally{doc.EndUndoRecord(undo);}
                 var viewport=doc.Views.ActiveView?.ActiveViewport;
@@ -112,11 +112,11 @@ public sealed class GSRhinoProbeCommand : Command
                     viewport.ZoomBoundingBox(new BoundingBox(new Point3d(-3,-2,-2.5),new Point3d(3,2,2.5)));
                 }
                 doc.Objects.UnselectAll();doc.Views.Redraw();global::Rhino.RhinoApp.WriteLine(result);
-                global::Rhino.RhinoApp.WriteLine("试验采用两次 Undo：先移除遮挡几何，再移除 GS 块。此处未自动判断视觉通过；可运行 GSRhinoDiagnostics 查看状态。");
+                global::Rhino.RhinoApp.WriteLine(UiText.Get("The test uses two Undo steps: remove occlusion geometry, then GS blocks. Visual acceptance was not determined automatically. Run GSRhinoDiagnostics for status."));
                 return true;
             }).ConfigureAwait(false);
         }
-        catch(Exception ex){GSRhinoHost.Ui(()=>global::Rhino.RhinoApp.WriteLine("GS 试验未完成："+GSRhinoHost.FriendlyError(ex)));}
+        catch(Exception ex){GSRhinoHost.Ui(()=>global::Rhino.RhinoApp.WriteLine(UiText.Get("GS test not completed: ")+GSRhinoHost.FriendlyError(ex)));}
     }
     private static string WriteFixture()
     {
@@ -144,10 +144,10 @@ public sealed class GSRhinoExportCommand : Command
         try
         {
             GaussianDocument.ExportSnapshot snapshot = GaussianDocument.CaptureExport(doc, selectedOnly: true);
-            using var dialog = new Eto.Forms.SaveFileDialog { Title = "导出选中的 GS 块", FileName = "gaussian-scene.usdz" };
+            using var dialog = new Eto.Forms.SaveFileDialog { Title = UiText.Get("Export selected GS blocks"), FileName = "gaussian-scene.usdz" };
             GSRhinoPanel.AddExportFilters(dialog);
             if (dialog.ShowDialog(global::Rhino.UI.RhinoEtoApp.MainWindowForDocument(doc)) != Eto.Forms.DialogResult.Ok) return Result.Cancel;
-            global::Rhino.RhinoApp.WriteLine("正在后台导出选中 GS；使用当前文档坐标与单位。如需全部导出或取消功能，请从 GSRhinoPanel 发起。");
+            global::Rhino.RhinoApp.WriteLine(UiText.Get("Exporting selected GS in the background using current document coordinates and units. Use GSRhinoPanel to export all or cancel."));
             _ = ExportAsync(dialog.FileName, snapshot);
             return Result.Success;
         }
@@ -160,6 +160,6 @@ public sealed class GSRhinoExportCommand : Command
             string result = await GaussianDocument.ExportAsync(path, snapshot, CancellationToken.None).ConfigureAwait(false);
             GSRhinoHost.Ui(() => global::Rhino.RhinoApp.WriteLine(result));
         }
-        catch (Exception ex) { GSRhinoHost.Ui(() => global::Rhino.RhinoApp.WriteLine("GS 导出未完成：" + GSRhinoHost.FriendlyError(ex))); }
+        catch (Exception ex) { GSRhinoHost.Ui(() => global::Rhino.RhinoApp.WriteLine(UiText.Get("GS export not completed: ") + GSRhinoHost.FriendlyError(ex))); }
     }
 }
